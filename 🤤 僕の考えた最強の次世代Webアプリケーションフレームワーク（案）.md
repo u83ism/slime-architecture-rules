@@ -1,4 +1,4 @@
-# 🤤 僕の考えた最強の次世代Webアプリケーションフレームワーク（案） v2.2.0
+# 🤤 僕の考えた最強の次世代Webアプリケーションフレームワーク（案） v2.3.0
 ## 概要
 TS製。既存の設計論と関数型プログラミングを参考に再設計されたWebアプリケーションスキーマ（と規定されたスケーリング方法）を元にした **設計解析＆改善提案プログラム（Linter＆自動refactor）** 及びアプリケーションFW（＆ツールキット）からなる。
 
@@ -172,6 +172,7 @@ route.post('/api', myCustomMiddleware, SomeWorkflow)
 #### Kaachanのお叱りポイント
 - routeに実処理を書いたら ❌ Error
 - Workflow内に認証・認可・レートリミット等の横断的処理を書いたら ⚠️ Warning（`middleware.ts`への移動を促す）
+- `/api/` グループなしでAPIルートを定義したら 💡 Hint（「将来webルートを追加する予定があるなら `/api/` 名前空間の確保を検討してください」）
 
 ---
 
@@ -268,6 +269,11 @@ Slimeが自動カバーする範囲：Parse失敗→400 / Middleware拒否→401
   - app/store.tsの存在に対して ⚠️ Warning
   - app/client.tsは ❌ Error（client/client.tsに移動を強制）
   - Appからのみ各ドメイン参照可能。違反は ❌ Error
+  - app/route.ts にルート定義（URLパターン・ミドルウェア付与）が残存したら ⚠️ Warning（domain/*/routes.ts への移動を促す）
+- routes
+  - ルートに指定されたWorkflowファイルが存在しない場合は ⚠️ Warning（死んだルート候補）
+  - Workflowファイルが存在するがどのルートからも参照されていない場合は 💡 Hint（到達不能Workflow候補）
+  - `sunset` 日付を過ぎたルートが残存する場合は ⚠️ Warning（廃止ルートの棚卸しを促す）
 - Shared
   - `utility.ts` / `smallLogic.ts` 内の副作用を持つ処理に対して ❌ Error
   - 各ファイル肥大化に対して ⚠️ Warning
