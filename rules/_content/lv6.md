@@ -14,25 +14,26 @@ src/
     routes/
       api.ts        # /api/* namespace (applies prefix, delegates to domain routes)
       web.ts        # /* namespace (for future web routes; may be empty)
-    workflow.ts     # App-level workflows (non-domain-specific operations)
-    parse.ts        # App-level parse
+    workflow.ts     # App-level orchestration (coordinates across domains)
+    parse.ts        # App-level parse (parses input before passing to domain workflows)
     middleware.ts   # App-level middleware (auth, rate limiting, CORS, etc.)
   shared/
-    # Shared types, utilities, and constants used across domains
+    utility.ts      # Shared pure utility functions
+    smallLogic.ts   # Small logic not worth its own domain (pure functions only)
+    store.ts        # Shared DB access for data not yet assigned to a domain
+  client/
+    client.ts       # External API calls
+    adapter.ts      # Anti-corruption layer: maps external vocabulary to domain vocabulary
   domainUser/       # One folder per business domain
-    workflow.ts
-    parse.ts
-    repository.ts
-    client.ts
-    logic.ts
     routes.ts       # Route definitions for this domain (no /api prefix — added by app/routes/api.ts)
+    workflow.ts     # Domain workflow (receives already-parsed input from app layer)
+    logic.ts        # Domain business judgment and calculations
+    store.ts        # Domain-specific DB access
   domainOrder/
-    workflow.ts
-    parse.ts
-    repository.ts
-    client.ts
-    logic.ts
     routes.ts
+    workflow.ts
+    logic.ts
+    store.ts
 ```
 
 ---
@@ -40,14 +41,14 @@ src/
 ## Domain Folder Rules
 
 - Domain folders are named with the `domain` prefix in camelCase: `domainUser`, `domainOrder`, `domainPayment`.
-- Each domain folder is **self-contained**: it owns its workflow, parse, repository, client, and logic.
+- Each domain folder is **self-contained**: it owns its workflow, logic, store, and routes.
 - **Domains must not import from each other directly.** Inter-domain communication goes through `shared/` or events (introduced at Lv8).
-- `app/` is the only layer allowed to import from multiple domains (to aggregate routes).
+- `app/` is the only layer allowed to import from multiple domains (to aggregate routes and orchestrate).
 
 ```ts
 // NG — domain importing from another domain
 // domainOrder/workflow.ts
-import { findUserById } from '../domainUser/repository'  // not allowed
+import { findUserById } from '../domainUser/store'  // not allowed
 ```
 
 ### app/route.ts
@@ -68,10 +69,19 @@ export const routes = [userRoutes, orderRoutes]
 ```ts
 // app/routes/api.ts
 route.group({ prefix: '/api' }, (r) => {
-  r.use(userRoutes)    // domain/user routes → /api/users
-  r.use(orderRoutes)   // domain/order routes → /api/orders
+  r.use(userRoutes)    // domainUser routes → /api/users
+  r.use(orderRoutes)   // domainOrder routes → /api/orders
 })
 ```
+
+### app/workflow.ts
+- Coordinates across multiple domains: receives parsed input, calls domain workflows, handles domain events.
+- Must not contain business judgment logic (belongs in domain `logic.ts`).
+- Must not contain DB access (`store.ts`), external API calls (`client/`), or infrastructure code.
+
+### app/parse.ts
+- Handles app-level request parsing. Domain workflows receive already-parsed, typed input.
+- Must not access DB or external APIs — pure transformation only.
 
 ### domainXxx/routes.ts
 - Defines routes for this domain without any `/api` prefix — the prefix is applied in `app/routes/api.ts`.
@@ -86,18 +96,50 @@ export const userRoutes = (r: Router) => {
 }
 ```
 
-### Layer rules within each domain
-All Lv1–Lv5 layer rules apply within each domain folder:
-- `workflow.ts` orchestrates, calls parse/repository/client/logic — never imports ORM directly.
-- `parse.ts` is pure transformation — no DB access.
-- `repository.ts` uses `find*` / `list*` / `save*` / `create*` naming.
-- `client.ts` is the anti-corruption layer for external APIs.
-- `logic.ts` contains pure functions with domain-prefixed names, returns `Result` for fallible operations.
+### domainXxx/workflow.ts
+- Receives already-parsed, typed input from the app layer.
+- Calls domain `store.ts` for DB operations and `client/` for external API calls via the app layer.
+- Must not contain business judgment (belongs in `logic.ts`).
+- Must not import ORM/DB modules directly.
+
+### domainXxx/logic.ts
+- Pure functions only: no DB access, no external API calls, no side effects.
+- Must have domain-prefixed names (`userCan*`, `orderCan*`, `calcOrder*`, etc.).
+- Fallible functions return `Result` type — no `throw`.
+- **Must be tested** (`logic.test.ts`). Missing tests are a 💡 Hint at Lv6.
+
+### domainXxx/store.ts
+- Domain-specific DB reads and writes.
+- Must not return ORM types — return plain domain types only.
+- Naming convention (now **Error** if violated, up from Hint at Lv5):
+  - Reads: `find*` / `list*` / `get*` / `count*` / `search*`
+  - Writes: `create*` / `save*` / `update*` / `delete*` / `remove*`
 
 ### shared/
-- Contains types, utilities, and constants shared across multiple domains.
+- `shared/utility.ts`: pure utility functions shared across domains (no side effects).
+- `shared/smallLogic.ts`: small pure logic not worth its own domain (no DB access, no side effects).
+- `shared/store.ts`: DB access for data not yet assigned to a specific domain (temporary placement).
 - Must not import from any domain folder.
-- Suitable for: shared type definitions, utility functions, common error codes.
+- Suitable for: shared type definitions, common error codes, utility functions.
+
+### client/
+- `client/client.ts`: all external API calls. Workflows must not use `fetch`/axios directly.
+- `client/adapter.ts`: anti-corruption layer — translates external API vocabulary to domain vocabulary. External errors become domain `Result.err` or re-thrown as technical errors.
+- Domains call `client/` through the app layer (domain workflows do not import from `client/` directly).
+- Must not make business judgments — only translate external responses.
+
+```ts
+// client/adapter.ts
+export const chargePayment = async (amount: number): Promise<Result<Receipt, "PAYMENT_DECLINED">> => {
+  try {
+    const res = await stripeClient.charge(amount)
+    return ok(mapToReceipt(res))
+  } catch (e) {
+    if (e.code === 'card_declined') return err("PAYMENT_DECLINED")
+    throw e
+  }
+}
+```
 
 ---
 
@@ -137,8 +179,10 @@ export default {
 
 - Domain folders follow `domain[A-Z]` naming (camelCase with `domain` prefix).
 - No direct imports between domain folders.
-- `app/route.ts` does not contain route definitions (aggregation only).
-- If `app/route.ts` contains inline route definitions, Kaachan emits a ⚠️ Warning.
+- `app/route.ts` does not contain inline route definitions (aggregation only) — ⚠️ Warning if violated.
+- `app/workflow.ts` does not contain `logic.ts`, `store.ts`, or `client/` code (not allowed in App layer).
+- `store.ts` function naming violations are now **❌ Error** (upgraded from 💡 Hint at Lv5).
+- `store.ts` still must not return ORM types.
 - All Lv4–Lv5 checks continue to apply within each domain.
 
 ---
@@ -147,9 +191,13 @@ export default {
 
 When adding a new feature that spans multiple domains:
 1. Identify which domain owns the primary responsibility.
-2. If data from another domain is needed, prefer passing it as a parameter (resolved by the calling workflow) rather than importing cross-domain.
+2. If data from another domain is needed, have the app-layer workflow resolve it and pass it as a parameter to the domain workflow.
 3. If cross-domain coordination is complex, suggest preparing for Lv7 (`cross-` folders).
 4. Never add direct imports between domain folders — propose the correct pattern instead.
+
+When `app/route.ts` or `shared/store.ts` is growing large:
+- `app/route.ts` growing = signal that domain `routes.ts` files are not being used properly.
+- `shared/store.ts` growing = signal that DB access should be moved into the appropriate domain `store.ts`.
 
 ---
 
@@ -157,5 +205,7 @@ When adding a new feature that spans multiple domains:
 
 To advance to Lv7, introduce:
 - `cross-<name>/` folders for concerns that span multiple domains (e.g., `cross-auth/`, `cross-notification/`)
+- `defer()` for post-commit side effects
+- Make logic tests mandatory (Error if missing)
 
 Run `slime level:next` to check what is needed.

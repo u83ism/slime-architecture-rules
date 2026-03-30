@@ -11,11 +11,15 @@ The current level is **Lv5**: business judgment and domain calculations are isol
 src/
   route.ts        # HTTP routing only — no business logic
   middleware.ts   # Authentication, rate limiting, CORS, etc.
-  workflow.ts     # Request orchestration (parse → logic → repository/client → response)
+  workflow.ts     # Request orchestration (parse → logic → store/client → response)
   parse.ts        # Request validation and transformation
-  repository.ts   # All DB reads and writes
+  store.ts        # All DB reads and writes
   client.ts       # All external API calls
   logic.ts        # Pure business judgment and domain calculations
+  # ↓ Intermediate promotion when logic.ts grows too large (precursor to Lv6 domain split)
+  logic/
+    user.ts       # userCan* and user calc functions
+    order.ts      # orderCan* and order calc functions
 ```
 
 ---
@@ -42,17 +46,18 @@ route.group({ prefix: '/api' }, (r) => {
 - Returns standardized error responses on rejection (401, 403, 429, etc.).
 
 ### workflow.ts
-- Orchestrates one request: `parse` → `logic` → `repository`/`client` → response.
-- Calls repository for data, passes **resolved primitive values** to logic — never passes repository functions into logic.
+- Orchestrates one request: `parse` → `logic` → `store`/`client` → response.
+- Calls store for data, passes **resolved primitive values** to logic — never passes store functions into logic.
 - Handles `Result` errors from logic and client, converting them to `throw new Error(errorCode)`.
 - Must not contain business judgment (belongs in `logic.ts`).
 - Must not contain validation logic (belongs in `parse.ts`).
+- When multiple store operations must succeed or fail together, use `withTransaction()`.
 
 ```ts
 // OK — workflow resolves data, then passes primitives to logic
 export const CreateUserWorkflow = async (req: Request, res: Response) => {
   const input = parseCreateUser(req.body)
-  const exists = await findUserByEmail(input.email)        // repository resolves data
+  const exists = await findUserByEmail(input.email)        // store resolves data
   const check = userCanCreate(!!exists)                    // logic receives primitive
   if (!check.ok) throw new Error(check.error)
   await saveUser({ ...input, id: generateId() })
@@ -67,14 +72,15 @@ if (exists) throw new Error('USER_ALREADY_EXISTS')  // belongs in logic.ts
 - Validates and transforms raw request data (body, params, query) into typed values.
 - Must not access DB or external APIs — pure transformation only.
 - On validation failure, throw an error that the framework maps to HTTP 400.
-- If `parse.ts` grows large (> ~200 lines), split into a `parse/` subdirectory by operation.
+- If `parse.ts` grows large (> ~300 lines or ~10 schemas), split into a `parse/` subdirectory by operation.
 
-### repository.ts
+### store.ts
 - All DB reads and writes live here. Workflows must not import ORM/DB modules directly.
-- Function naming convention (enforced by Kaachan):
-  - Reads: `find*` / `list*`
-  - Writes: `save*` / `create*`
+- Function naming convention (recommended at Lv4; becomes required Error at Lv6):
+  - Reads: `find*` / `list*` / `get*` / `count*` / `search*`
+  - Writes: `create*` / `save*` / `update*` / `delete*` / `remove*`
 - Must not contain business logic — only data access.
+- Must not return ORM types (`Prisma.User`, etc.) — return only plain domain types.
 
 ### client.ts
 - All external API calls live here. Workflows must not use `fetch`/axios directly.
@@ -92,11 +98,11 @@ if (exists) throw new Error('USER_ALREADY_EXISTS')  // belongs in logic.ts
   - `userCan*` / `orderCan*` / `paymentCan*` etc. for business judgments
   - `calcOrder*` / `formatInvoice*` / `applyDiscount*` etc. for calculations
 
-- **Logic never calls repository or client**. If you feel the urge to call a repository inside logic, the workflow's argument design is wrong — the workflow should resolve the data first and pass primitives to logic.
+- **Logic never calls store or client**. If you feel the urge to call store inside logic, the workflow's argument design is wrong — the workflow should resolve the data first and pass primitives to logic.
 
-- **Logic must be tested**. Because logic is pure, tests require no mocks.
+- **Logic must be tested**. Because logic is pure, tests require no mocks. (Failing to test logic becomes a Kaachan Error at Lv7.)
 
-- Business threshold values (e.g., "30 days", "3 retries") belong in logic, not in repository or workflow.
+- Business threshold values (e.g., "30 days", "3 retries") belong in logic, not in store or workflow.
 
 ```ts
 // OK — business judgment (Result type)
@@ -110,8 +116,8 @@ export const calcOrderTotal = (items: Item[]): number =>
 export const applyDiscount = (price: number, coupon: Coupon): number =>
   price * (1 - coupon.rate)
 
-// NG — logic importing repository
-import { findUserByEmail } from './repository'  // not allowed in logic.ts
+// NG — logic importing store
+import { findUserByEmail } from './store'  // not allowed in logic.ts
 
 // NG — missing domain prefix
 export const canCreate = ...   // prefix required: userCanCreate, orderCanCreate, etc.
@@ -160,11 +166,12 @@ export default {
 
 ## What Kaachan Checks at Lv5
 
-- `logic.ts` does not import from `repository.ts`, `client.ts`, or any DB/ORM module.
+- `logic.ts` does not import from `store.ts`, `client.ts`, or any DB/ORM module.
 - Logic function names have a domain prefix (`userCan*`, `orderCan*`, `calcOrder*`, etc.).
 - Logic functions that can fail return `Result` type — not `throw`.
 - `workflow.ts` does not import ORM/DB modules directly.
-- `repository.ts` function names follow `find*` / `list*` / `save*` / `create*` conventions.
+- `store.ts` function names follow `find*` / `list*` / `get*` / `count*` / `search*` / `create*` / `save*` / `update*` / `delete*` / `remove*` conventions (💡 Hint).
+- `store.ts` does not use ORM types as return types.
 - If `logic.ts` exceeds ~300 lines or ~10 functions, Kaachan emits a 💡 Hint to consider splitting into `logic/`.
 - If `logic.ts` exceeds ~500 lines or mixes domain prefixes, Kaachan emits a ⚠️ Warning.
 
@@ -175,9 +182,10 @@ export default {
 When `workflow.ts` or `logic.ts` is approaching the size thresholds above:
 1. Propose domain modeling to the user — help articulate what business concepts are present.
 2. Identify function groups by domain prefix (e.g., all `user*` functions, all `order*` functions).
-3. Suggest splitting into `logic/user.ts`, `logic/order.ts` as a precursor to Lv6 domain folders.
-4. Only proceed with structural changes after user confirmation.
-5. Use `slime level:next` to show what Lv6 requires before suggesting the migration.
+3. If type dependencies between function groups do not intersect, suggest them as domain split candidates.
+4. Suggest splitting into `logic/user.ts`, `logic/order.ts` as a precursor to Lv6 domain folders.
+5. Only proceed with structural changes after user confirmation.
+6. Use `slime level:next` to show what Lv6 requires before suggesting the migration.
 
 ---
 
@@ -185,7 +193,8 @@ When `workflow.ts` or `logic.ts` is approaching the size thresholds above:
 
 To advance to Lv6, introduce domain folder separation:
 - `app/` — application-level route, workflow, parse, middleware
-- `shared/` — shared types and utilities
-- `domainXxx/` — one folder per business domain, each containing its own workflow, repository, logic
+- `shared/` — shared utilities, small logic, and temporary shared DB access
+- `client/` — external API client and adapter (anti-corruption layer)
+- `domainXxx/` — one folder per business domain, each containing its own workflow, store, logic, routes
 
 Run `slime level:next` to check what is needed.

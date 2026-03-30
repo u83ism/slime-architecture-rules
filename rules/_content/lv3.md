@@ -63,7 +63,7 @@ export const CreateUserWorkflow = async (req: Request, res: Response) => {
 - Validates and transforms raw request data (body, params, query) into typed values.
 - Must not access DB or external APIs — pure transformation only.
 - On validation failure, throw an error that the framework maps to HTTP 400.
-- If `parse.ts` grows large (> ~200 lines), split into a `parse/` subdirectory by operation.
+- If `parse.ts` grows large (> ~300 lines or ~10 schemas), split into a `parse/` subdirectory by operation.
 
 ```ts
 // OK
