@@ -16,9 +16,11 @@
   ],
   "scripts": {
     "build": "tsc",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build:rules": "tsx scripts/build-rules.ts"
   },
   "devDependencies": {
+    "tsx": "^4.19.0",
     "typescript": "^5.4.0"
   },
   "keywords": [
