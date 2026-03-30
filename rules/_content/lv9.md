@@ -11,9 +11,6 @@ The current level is **Lv9**: infrastructure boundaries are explicit via `ports.
 src/
   app/
     route.ts
-    routes/
-      api.ts
-      web.ts
     workflow.ts     # Wires ports to domain workflows (composition root)
     parse.ts
     middleware.ts

@@ -11,9 +11,6 @@ The current level is **Lv6**: the codebase is split into domain folders. Each do
 src/
   app/
     route.ts        # Entry point — imports and aggregates domain routes
-    routes/
-      api.ts        # /api/* namespace (applies prefix, delegates to domain routes)
-      web.ts        # /* namespace (for future web routes; may be empty)
     workflow.ts     # App-level orchestration (coordinates across domains)
     parse.ts        # App-level parse (parses input before passing to domain workflows)
     middleware.ts   # App-level middleware (auth, rate limiting, CORS, etc.)
@@ -25,7 +22,7 @@ src/
     client.ts       # External API calls
     adapter.ts      # Anti-corruption layer: maps external vocabulary to domain vocabulary
   domainUser/       # One folder per business domain
-    routes.ts       # Route definitions for this domain (no /api prefix — added by app/routes/api.ts)
+    routes.ts       # Route definitions for this domain
     workflow.ts     # Domain workflow (receives already-parsed input from app layer)
     logic.ts        # Domain business judgment and calculations
     store.ts        # Domain-specific DB access
@@ -62,18 +59,6 @@ import { orderRoutes } from '../domainOrder/routes'
 export const routes = [userRoutes, orderRoutes]
 ```
 
-### app/routes/api.ts
-- Applies the `/api` prefix and delegates to domain routes.
-- Versioning (`/v1`, `/v2`) is added here if needed — domain routes stay prefix-agnostic.
-
-```ts
-// app/routes/api.ts
-route.group({ prefix: '/api' }, (r) => {
-  r.use(userRoutes)    // domainUser routes → /api/users
-  r.use(orderRoutes)   // domainOrder routes → /api/orders
-})
-```
-
 ### app/workflow.ts
 - Coordinates across multiple domains: receives parsed input, calls domain workflows, handles domain events.
 - Must not contain business judgment logic (belongs in domain `logic.ts`).
@@ -84,7 +69,7 @@ route.group({ prefix: '/api' }, (r) => {
 - Must not access DB or external APIs — pure transformation only.
 
 ### domainXxx/routes.ts
-- Defines routes for this domain without any `/api` prefix — the prefix is applied in `app/routes/api.ts`.
+- Registers URL patterns, middleware, and workflow handlers for this domain.
 - Middleware is attached explicitly on each route.
 
 ```ts

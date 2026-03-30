@@ -11,9 +11,6 @@ The current level is **Lv8**: domain event types are centralized in `shared/even
 src/
   app/
     route.ts
-    routes/
-      api.ts
-      web.ts
     workflow.ts     # Receives domain events and passes them to subsequent workflows
     parse.ts
     middleware.ts
@@ -143,7 +140,6 @@ export const createOrderWithInventory = (input: ValidatedInput) =>
 ## app/ Rules (unchanged from Lv6–Lv7)
 
 - `app/route.ts` aggregates domain routes only — no inline route definitions.
-- `app/routes/api.ts` applies `/api` prefix and delegates to domain routes.
 - `app/workflow.ts` receives domain events and coordinates downstream workflows.
 - App layer must not contain `logic.ts`, `store.ts`, or direct `client/` calls.
 
