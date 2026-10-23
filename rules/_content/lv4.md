@@ -23,17 +23,20 @@ src/
 
 ### route.ts
 - Define HTTP routes only: method, path, middleware attachment, and which workflow handles the request.
-- No business logic, no DB access, no response construction here.
+- No business logic and no DB access. Response construction is limited to response wrappers (`json(...)`) and thin handlers (see Lv3).
 - Middleware is attached **explicitly on each route** — never auto-applied by folder convention.
 - Use `route.group({ prefix: '/api' })` to namespace API routes.
 
 ```ts
 // OK
 route.group({ prefix: '/api' }, (r) => {
-  r.get('/users/:id', slime.auth(), GetUserWorkflow)
-  r.post('/users',    slime.auth(), CreateUserWorkflow)
+  r.get('/users/:id', slime.auth(), json(parseGetUser, GetUserWorkflow))
+  r.post('/users',    slime.auth(), json(parseCreateUser, CreateUserWorkflow, { status: 201 }))
 })
 ```
+
+- `json(parse, workflow)` runs parse on `{ params, query, body }`, passes the typed input and the principal to the workflow, and returns the result as JSON. Routes without input use `json(workflow)`.
+- Thin handlers (HTTP I/O only, e.g., setting cookies) may be written directly in `route.ts`. They must not call store or logic directly.
 
 ### middleware.ts
 - Middleware is the **HTTP gate**. It has three jobs:
@@ -45,7 +48,8 @@ route.group({ prefix: '/api' }, (r) => {
 - Returns standardized error responses on rejection (401, 403, 429, etc.).
 
 ### workflow.ts
-- Orchestrates one request: `parse` → `store`/`client` → response.
+- Receives typed input and the principal (in that order; the principal may be omitted), calls `store`/`client`, and returns data.
+- Must not touch HTTP request, response, or context objects, and must not call parse functions.
 - Calls `store.ts` for all DB operations. Never accesses DB directly (no ORM imports).
 - Calls `client.ts` for all external API operations.
 - Must not contain validation logic (belongs in `parse.ts`).
@@ -54,24 +58,21 @@ route.group({ prefix: '/api' }, (r) => {
 
 ```ts
 // OK
-export const CreateUserWorkflow = async (req: Request, res: Response) => {
-  const input = parseCreateUser(req.body)
-  const exists = await findUserByEmail(input.email)   // store
-  await saveUser({ ...input, id: generateId() })      // store
-  res.status(201).json({ ok: true })
+export const CreateUserWorkflow = async (input: CreateUserInput) => {
+  const exists = await findUserByEmail(input.email)      // store
+  return await saveUser({ ...input, id: generateId() })  // store
 }
 
 // NG — ORM imported directly in workflow
 import { db } from '../db'  // wrong: DB access belongs in store.ts
 
 // OK — cross-store transaction via withTransaction()
-export const CreateUserWithAuditWorkflow = async (req: Request, res: Response) => {
-  const input = parseCreateUser(req.body)
-  await withTransaction(async () => {
+export const CreateUserWithAuditWorkflow = async (input: CreateUserInput) => {
+  return withTransaction(async () => {
     const user = await saveUser(input)
     await saveAuditLog(user.id, 'USER_CREATED')
+    return user
   })
-  res.status(201).json({ ok: true })
 }
 
 // NG — ORM transaction API directly in workflow

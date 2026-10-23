@@ -12,6 +12,10 @@ ExpressやHonoのハンドラは `(req, res)` を受け取るのでHTTPと不可
 
 Slimeでは **Parse層がHTTP境界を担う** という設計判断をした。Parseが `unknown` → 純粋な型への変換を担うことで、Workflowの引数は「どこから来たか」を問わないただのデータになる。結果としてWorkflowはルーティング・テスト・イベント・バックグラウンドジョブのどこからでも同じインターフェースで呼び出せる。
 
+具体的には、route定義が`json(parse, workflow)`のような応答形式の関数でparseとWorkflowを組み合わせる。Workflowは型付きの入力と、Middlewareが確定したプリンシパル（誰の権限で実行されているかを表す値）だけを受け取り、HTTPのリクエストやレスポンスには触れない。HTTP以外の起動口も、同じ形の入力とプリンシパルを作って呼ぶ。
+
+なお実践例（vote-system）では、Hono の Context を受け取って Response を返す Workflow でも問題なく回った。それでもこの形を採らないのは、Lv6以降で「WorkflowはHTTP以外の起動口からも呼ばれる」ことを高レベル帯の前提にしているからである。Cookieやリダイレクトのように HTTP 固有の操作が必要なルートだけは、route.ts に HTTP の入出力だけを行う薄いハンドラーを書いて吸収する。
+
 ```ts
 // テストでHTTPを偽装する必要がない。ただの関数呼び出し
 const result = await CreateUserWorkflow({ name: 'foo', email: 'foo@example.com' })

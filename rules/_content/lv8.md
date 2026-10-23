@@ -77,14 +77,13 @@ export const createUserWorkflow = async (input: ValidatedInput): Promise<UserCre
 }
 
 // app/workflow.ts — receives event and dispatches downstream
-export const CreateUserWorkflow = async (req: Request, res: Response) => {
-  const valid = parseCreateUser(req.body)
-  const event = await createUserWorkflow(valid)
+export const CreateUserWorkflow = async (input: CreateUserInput) => {
+  const event = await createUserWorkflow(input)
 
   await notificationWorkflow(event)             // synchronous important follow-up
   defer(() => analyticsWorkflow(event))         // async, failure-tolerant side effect
 
-  res.status(201).json(event.payload)
+  return event.payload
 }
 ```
 
@@ -130,7 +129,7 @@ export const createOrderWithInventory = (input: ValidatedInput) =>
 - All Lv1–Lv7 layer rules apply within each domain.
 
 ### Layer rules within each domain
-- `workflow.ts`: orchestrates — calls parse/store/logic — no ORM imports. Returns domain events.
+- `workflow.ts`: receives parsed input and the principal — calls store/logic and `client/adapter.ts` — no ORM imports, no HTTP objects. Returns domain events.
 - `logic.ts`: pure functions with domain-prefixed names, `Result` for fallible operations. Decides resource-level authorization from the principal and the loaded resource.
 - `logic.test.ts`: **mandatory** — missing is ❌ Error.
 - `store.ts`: `find*` / `list*` / `get*` / `count*` / `search*` / `create*` / `save*` / `update*` / `delete*` / `remove*` naming; no ORM types in return values.

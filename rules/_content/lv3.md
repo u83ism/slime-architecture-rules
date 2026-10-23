@@ -21,15 +21,30 @@ src/
 
 ### route.ts
 - Define HTTP routes only: method, path, middleware attachment, and which workflow handles the request.
-- No business logic, no DB access, no response construction here.
+- No business logic and no DB access. Response construction is limited to response wrappers (`json(...)`) and thin handlers (see below).
 - Middleware is attached **explicitly on each route** — never auto-applied by folder convention.
 - Use `route.group({ prefix: '/api' })` to namespace API routes.
 
 ```ts
 // OK
 route.group({ prefix: '/api' }, (r) => {
-  r.get('/users/:id', slime.auth(), GetUserWorkflow)
-  r.post('/users',    slime.auth(), CreateUserWorkflow)
+  r.get('/users',     slime.auth(), json(ListUsersWorkflow))
+  r.get('/users/:id', slime.auth(), json(parseGetUser, GetUserWorkflow))
+  r.post('/users',    slime.auth(), json(parseCreateUser, CreateUserWorkflow, { status: 201 }))
+})
+```
+
+- From Lv3, **route.ts combines parse and workflow**. A response wrapper such as `json(parse, workflow)` runs the parse function on `{ params, query, body }`, passes the typed input and the principal established by middleware to the workflow, and returns the workflow's result as JSON.
+- Routes without input omit the parse function: `json(workflow)`. Other response wrappers: `stream`, `html`, `sse`.
+- Slime FW is expected to provide these wrappers. On Hono or Express, write equivalent helpers yourself.
+- Routes that need HTTP-specific operations (setting cookies, redirects) may use a **thin handler** written directly in `route.ts`. A thin handler may only do HTTP I/O: read the context, call parse, call the workflow, and set cookies, headers, or status. It must not call store or logic directly.
+
+```ts
+// Thin handler — login needs to set a cookie
+r.post('/login', async (c) => {
+  const session = await LoginWorkflow(parseLogin({ body: await c.req.json() }), anonymous)
+  setCookie(c, 'sid', session.id)
+  return c.json({ ok: true })
 })
 ```
 
@@ -43,28 +58,38 @@ route.group({ prefix: '/api' }, (r) => {
 - Returns standardized error responses on rejection (401, 403, 429, etc.).
 
 ### workflow.ts
-- Orchestrates one request: call `parse` → call repository/client → return response.
-- The only layer that coordinates between parse, repository, and client.
+- Receives **typed input and the principal**, in that order, and returns data. Workflows that do not need the principal may omit the second parameter.
+- Must not touch HTTP request, response, or context objects. The workflow does not know HTTP, so the same workflow can be called from batch jobs, queues, cron, and tests. Entry points without a user (e.g., cron) pass a system principal.
+- Must not call parse functions — parsing happens in `route.ts`.
 - Must not contain validation logic — that belongs in `parse.ts`.
 - Must not contain business judgment logic — that belongs in `logic.ts` (introduced at Lv5).
 
 ```ts
 // OK
-export const CreateUserWorkflow = async (req: Request, res: Response) => {
-  const input = parseCreateUser(req.body)           // parse layer
-  await db.users.create(input)                      // DB (still inline at Lv3)
-  res.status(201).json({ ok: true })
+export const CreateUserWorkflow = async (input: CreateUserInput) => {
+  return await db.users.create(input)                // DB (still inline at Lv3)
 }
 
-// NG — validation inside workflow
+// NG — workflow touching HTTP
 export const CreateUserWorkflow = async (req: Request, res: Response) => {
-  if (!req.body.email) throw new Error('email required') // belongs in parse.ts
-  ...
+  const input = parseCreateUser(req.body)            // parse belongs in route.ts
+  res.status(201).json(await db.users.create(input)) // response belongs in route.ts
 }
+```
+
+Principal shape (example):
+
+```ts
+type Principal =
+  | { kind: "user"; userId: string; roles: readonly string[] }
+  | { kind: "service"; clientId: string }
+  | { kind: "system"; job: string }   // cron, queue workers
+  | { kind: "anonymous" }
 ```
 
 ### parse.ts (new at Lv3)
 - Validates and transforms raw request data (body, params, query) into typed values.
+- Receives `{ params, query, body }` from the response wrapper and returns one typed input.
 - Must not access DB or external APIs — pure transformation only.
 - On validation failure, throw an error that the framework maps to HTTP 400.
 - If `parse.ts` grows large (> ~300 lines or ~10 schemas), split into a `parse/` subdirectory by operation.
@@ -102,8 +127,9 @@ export const parseCreateUser = async (body: unknown) => {
 ## What Kaachan Checks at Lv3
 
 - `parse.ts` does not import from DB/ORM modules.
-- `workflow.ts` does not contain raw `req.body` access without going through `parse.ts`.
-- `route.ts` does not contain inline handler logic.
+- `workflow.ts` does not touch HTTP request, response, or context objects (⚠️ Warning).
+- `workflow.ts` does not call parse functions — parsing belongs in `route.ts` (💡 Hint).
+- `route.ts` handlers do only HTTP I/O — no store, logic, or DB calls (⚠️ Warning).
 
 ---
 

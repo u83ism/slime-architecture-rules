@@ -12,7 +12,7 @@ src/
   app/
     route.ts        # Entry point — imports and aggregates domain routes
     workflow.ts     # App-level orchestration (coordinates across domains)
-    parse.ts        # App-level parse (parses input before passing to domain workflows)
+    parse.ts        # Schemas shared by multiple domains only
     middleware.ts   # App-level middleware (auth, rate limiting, CORS, etc.)
   shared/
     utility.ts      # Shared pure utility functions
@@ -26,12 +26,14 @@ src/
     logic.ts
     store.ts
   domainUser/       # One folder per business domain
-    routes.ts       # Route definitions for this domain
-    workflow.ts     # Domain workflow (receives already-parsed input from app layer)
+    routes.ts       # Route definitions: combines parse and workflow for this domain
+    parse.ts        # Input schemas for this domain (moved from app/ at Lv6)
+    workflow.ts     # Domain workflow (receives parsed input and the principal)
     logic.ts        # Domain business judgment and calculations
     store.ts        # Domain-specific DB access
   domainOrder/
     routes.ts
+    parse.ts
     workflow.ts
     logic.ts
     store.ts
@@ -84,7 +86,7 @@ export const routes = [userRoutes, orderRoutes]
 - Must not contain DB access (`store.ts`), external API calls (`client/`), or infrastructure code.
 
 ### app/parse.ts
-- Handles app-level request parsing. Domain workflows receive already-parsed, typed input.
+- Holds only schemas shared by multiple domains. Each domain's own input schemas live in `domainXxx/parse.ts`.
 - Must not access DB or external APIs — pure transformation only.
 
 ### app/middleware.ts
@@ -93,21 +95,24 @@ export const routes = [userRoutes, orderRoutes]
 - Must not perform resource-level authorization (that belongs in domain `logic.ts`).
 
 ### domainXxx/routes.ts
-- Registers URL patterns, middleware, and workflow handlers for this domain.
+- Registers URL patterns, middleware, and the parse + workflow combination for this domain (see Lv3).
 - Middleware is attached explicitly on each route.
 
 ```ts
 // domainUser/routes.ts
 export const userRoutes = (r: Router) => {
-  r.get('/users',     slime.auth(), ListUsersWorkflow)
-  r.post('/users',    slime.auth(), CreateUserWorkflow)
-  r.get('/users/:id', slime.auth(), GetUserWorkflow)
+  r.get('/users',     slime.auth(), json(ListUsersWorkflow))
+  r.post('/users',    slime.auth(), json(parseCreateUser, CreateUserWorkflow, { status: 201 }))
+  r.get('/users/:id', slime.auth(), json(parseGetUser, GetUserWorkflow))
 }
 ```
 
+### domainXxx/parse.ts
+- Input schemas for this domain. Same rules as Lv3 `parse.ts`.
+
 ### domainXxx/workflow.ts
-- Receives already-parsed, typed input from the app layer.
-- Calls domain `store.ts` for DB operations and `client/` for external API calls via the app layer.
+- Receives parsed, typed input and the principal from `routes.ts` (see Lv3). Never touches HTTP objects.
+- Calls domain `store.ts` for DB operations and `client/adapter.ts` for external API calls.
 - Must not contain business judgment (belongs in `logic.ts`).
 - Must not import ORM/DB modules directly.
 
@@ -135,7 +140,7 @@ export const userRoutes = (r: Router) => {
 ### client/
 - `client/client.ts`: all external API calls. Workflows must not use `fetch`/axios directly.
 - `client/adapter.ts`: anti-corruption layer — translates external API vocabulary to domain vocabulary. External errors become domain `Result.err` or re-thrown as technical errors.
-- Domains call `client/` through the app layer (domain workflows do not import from `client/` directly).
+- Domain workflows may import `client/adapter.ts` directly. Calling `client/client.ts` directly is forbidden — always go through the adapter. The adapter has already translated external vocabulary into domain vocabulary, so for a domain it plays the same role as `store.ts`.
 - Must not make business judgments — only translate external responses.
 
 ```ts
@@ -190,6 +195,7 @@ export default {
 - Domain folders follow `domain[A-Z]` naming (camelCase with `domain` prefix).
 - Inter-domain imports follow the declared dependency DAG — undeclared directions are ❌ Error.
 - The dependency declaration contains no cycles — ❌ Error if it does.
+- Domain code does not import `client/client.ts` directly (bypassing the adapter) — ❌ Error if it does.
 - `app/route.ts` does not contain inline route definitions (aggregation only) — ⚠️ Warning if violated.
 - `app/workflow.ts` does not contain `logic.ts`, `store.ts`, or `client/` code (not allowed in App layer).
 - `store.ts` function naming violations are now **❌ Error** (upgraded from 💡 Hint at Lv5).

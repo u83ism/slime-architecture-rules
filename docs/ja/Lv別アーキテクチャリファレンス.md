@@ -105,7 +105,7 @@ route.get('/health', HealthCheckWorkflow)  // /api/ の外
 src/
   route.ts        # HTTPルーティングのみ
   middleware.ts   # 認証・レートリミット・CORS等
-  workflow.ts     # parse → 処理 → レスポンス
+  workflow.ts     # 型付きの入力を受け取って処理し、データを返す
   parse.ts        # リクエストのバリデーションと型変換
 ```
 
@@ -113,27 +113,60 @@ src/
 
 | ファイル | やること | やらないこと |
 |---|---|---|
-| `route.ts` | ルート定義・Middleware付与・Workflow指定 | ビジネスロジック・DB・レスポンス生成 |
+| `route.ts` | ルート定義・Middleware付与・parseとWorkflowの組み合わせ・薄いハンドラー | ビジネスロジック・DB |
 | `middleware.ts` | HTTPの関門（Lv2参照） | 業務判断、リソース単位の認可 |
-| `workflow.ts` | parse呼び出し → 処理 → レスポンス | バリデーションロジック |
+| `workflow.ts` | 型付きの入力とプリンシパルを受け取って処理し、データを返す | バリデーション、parseの呼び出し、HTTPのリクエスト・レスポンスへのアクセス |
 | `parse.ts` | `unknown` → 型付き値への変換。失敗時はthrow（FWが400にマップ） | DBアクセス・外部API呼び出し |
 
 - parseは「型変換」のみ行う。業務的なチェック（すでに存在するか等）はLv5のlogicで行う
 - `parse.ts` が300行 / 10スキーマを超えたら `parse/` サブディレクトリへ分割
 
+#### routeがparseとWorkflowを組み合わせる
+
+Lv3からWorkflowはHTTPを知らない。HTTPとの接続はroute.tsだけが担う。
+
 ```ts
-// parse.ts
-export const parseCreateUser = (body: unknown): CreateUserInput => {
+// route.ts — 応答形式の関数（json）がparseとWorkflowを組み合わせる
+route.group({ prefix: '/api' }, (r) => {
+  r.get('/users',     slime.auth(), json(ListUsersWorkflow))   // 入力のないルートはparseを省略
+  r.get('/users/:id', slime.auth(), json(parseGetUser, GetUserWorkflow))
+  r.post('/users',    slime.auth(), json(parseCreateUser, CreateUserWorkflow, { status: 201 }))
+})
+
+// parse.ts — params・query・bodyをまとめて受け取り、1つの型付きの入力にする
+export const parseCreateUser = (req: { params: unknown; query: unknown; body: unknown }): CreateUserInput => {
   // 型を検証してthrow、または型付き値を返す
-  return { name: body.name, email: body.email }
 }
 
-// workflow.ts
-export const CreateUserWorkflow = async (req, res) => {
-  const input = parseCreateUser(req.body)  // parse層
-  const user = await db.users.create(input)
-  res.status(201).json(user)
+// workflow.ts — 型付きの入力（とプリンシパル）を受け取り、データを返す
+export const CreateUserWorkflow = async (input: CreateUserInput) => {
+  return await db.users.create(input)
 }
+```
+
+- `json(parse, workflow)`は、リクエストをparseに通し、Middlewareが確定したプリンシパルと一緒にWorkflowへ渡し、戻り値をJSONで返す。応答形式は`json`の他に`stream`・`html`・`sse`がある（進化論「残課題：フロントエンドの扱い」参照）。Slime FWが提供する想定で、HonoやExpressでは同等の関数を自作する
+- Workflowの引数は**入力、プリンシパルの順**。プリンシパルを使わないWorkflowは第2引数を省略できる
+- Cookieの設定・リダイレクト等、HTTP固有の操作が必要なルートだけは、route.tsに**薄いハンドラー**を直接書いてよい。薄いハンドラーが行ってよいのはHTTPの入出力（コンテキストの読み取り・parseの呼び出し・Workflowの呼び出し・Cookie/ヘッダー/ステータスの設定）だけで、store・logicを直接呼ばない
+- バッチ・キュー・cron等、HTTP以外の起動口も同じ形（入力とプリンシパル）を作ってWorkflowを呼ぶ。cronのようにユーザーがいない起動口は、システムのプリンシパルを渡す
+- ルーティング設計方針・FW文書などでWorkflowを直接ルートに渡している例は、`json(...)`を省略した概念コードとして読む
+
+```ts
+// 薄いハンドラーの例（Cookieの設定が必要なログイン）
+r.post('/login', async (c) => {
+  const session = await LoginWorkflow(parseLogin({ body: await c.req.json() }), anonymous)
+  setCookie(c, 'sid', session.id)
+  return c.json({ ok: true })
+})
+```
+
+#### プリンシパルの型（例）
+
+```ts
+type Principal =
+  | { kind: "user"; userId: string; roles: readonly string[] }
+  | { kind: "service"; clientId: string }
+  | { kind: "system"; job: string }      // cron・キューワーカー等
+  | { kind: "anonymous" }
 ```
 
 ### エラーハンドリング
@@ -145,13 +178,15 @@ export const CreateUserWorkflow = async (req, res) => {
 ### Kaachanが検査する項目
 
 - `parse.ts` がDB/ORMモジュールをimportしている → ❌ Error
-- `workflow.ts` に `req.body` の直接アクセスがある（parseを通していない） → ⚠️ Warning
-- `route.ts` にインラインロジックがある → ⚠️ Warning
+- `workflow.ts` がHTTPのリクエスト・レスポンス・コンテキストに触れている → ⚠️ Warning
+- `workflow.ts` がparse関数を呼んでいる（parseはrouteで行う） → 💡 Hint
+- `route.ts` のハンドラーがHTTPの入出力以外（store・logic・DBの呼び出し等）を行っている → ⚠️ Warning
 
 ### 🆕 Lv3で追加されたこと
 
 - `parse.ts`：「Parse, don't validate」原則の導入
-- WorkflowがHTTPに依存しなくなる（parseが境界を担う）
+- WorkflowがHTTPに依存しなくなる（routeがparseとWorkflowを組み合わせ、Workflowは型付きの入力とプリンシパルだけを受け取る）
+- 応答形式の関数（`json(parse, workflow)`等）と薄いハンドラー
 
 ---
 
@@ -163,7 +198,7 @@ export const CreateUserWorkflow = async (req, res) => {
 src/
   route.ts        # HTTPルーティングのみ
   middleware.ts   # 認証・レートリミット・CORS等
-  workflow.ts     # parse → store/client → レスポンス
+  workflow.ts     # store/clientを呼んでデータを返す
   parse.ts        # リクエストのバリデーションと型変換
   store.ts        # DBの読み書きすべて
   client.ts       # 外部API呼び出しすべて（腐敗防止層）
@@ -173,9 +208,9 @@ src/
 
 | ファイル | やること | やらないこと |
 |---|---|---|
-| `route.ts` | ルート定義のみ | ビジネスロジック・DB |
+| `route.ts` | ルート定義、parseとWorkflowの組み合わせ（Lv3参照） | ビジネスロジック・DB |
 | `middleware.ts` | HTTPの関門（Lv2参照）。関門の判定に必要なstore/client呼び出しは可 | 業務判断、リソース単位の認可 |
-| `workflow.ts` | parse → store/client → レスポンス、`withTransaction()` でトランザクション管理 | ORM直接import、業務判断 |
+| `workflow.ts` | store/clientを呼んでデータを返す、`withTransaction()` でトランザクション管理 | ORM直接import、業務判断、HTTPへのアクセス |
 | `parse.ts` | 型変換のみ | DBアクセス・外部API |
 | `store.ts` | DBの読み書きのみ、ドメイン型で返す | ORMオブジェクトを返す、業務ロジック |
 | `client.ts` | 外部APIアクセス、外部エラー→ドメインエラーへの変換 | 業務判断（閾値判定等） |
@@ -248,7 +283,7 @@ await withTransaction(async () => {
 src/
   route.ts        # HTTPルーティングのみ
   middleware.ts   # 認証・レートリミット・CORS等
-  workflow.ts     # parse → logic → store/client → レスポンス
+  workflow.ts     # store/clientでデータを解決 → logicで判断 → データを返す
   parse.ts        # リクエストのバリデーションと型変換
   store.ts        # DBの読み書きすべて
   client.ts       # 外部API呼び出しすべて
@@ -352,7 +387,7 @@ src/
   app/
     route.ts          # エントリーポイント（domainルートをimportして束ねるだけ）
     workflow.ts       # クロスドメインオーケストレーション（App層）
-    parse.ts          # App層のparseとtype変換
+    parse.ts          # 複数domainで共有するスキーマだけ
     middleware.ts     # App層のMiddleware（認証・レートリミット等）
   shared/
     utility.ts        # 共有の純粋ユーティリティ関数
@@ -366,12 +401,14 @@ src/
     logic.ts
     store.ts
   domainUser/
-    routes.ts         # userドメインのルート定義
-    workflow.ts       # App層からパース済み入力を受け取る
+    routes.ts         # userドメインのルート定義（parseとWorkflowを組み合わせる）
+    parse.ts          # userドメインの入力スキーマ（Lv6でapp/から移動）
+    workflow.ts       # parse済みの入力とプリンシパルを受け取る
     logic.ts          # userドメインの業務判断・計算
     store.ts          # userドメインのDBアクセス
   domainOrder/
     routes.ts
+    parse.ts
     workflow.ts
     logic.ts
     store.ts
@@ -384,7 +421,7 @@ src/
 | 原則 | 内容 |
 |---|---|
 | 命名 | `domain[A-Z]camelCase`（例: `domainUser`, `domainOrder`） |
-| 自己完結 | 各domainはroutes / workflow / logic / storeを持つ |
+| 自己完結 | 各domainはroutes / parse / workflow / logic / storeを持つ |
 | 依存はDAGで宣言 | domain間のimportは、設定ファイルで宣言した依存の向きに限り可。宣言外の向きと循環は禁止 |
 | App層は全domain参照可 | App層は宣言に関係なく全domainをimportできる（ルートの集約とオーケストレーションのため） |
 
@@ -415,6 +452,7 @@ export default {
 |---|---|---|
 | `app/route.ts` | domainルートをimportして束ねるだけ | ルート定義・Middleware定義 |
 | `app/workflow.ts` | 複数domainをまたぐオーケストレーション | ビジネス判断・DBアクセス・client直接呼び出し |
+| `app/parse.ts` | 複数domainで共有するスキーマだけ | domain固有のスキーマ（`domainXxx/parse.ts`へ） |
 
 App層が持ってはいけないもの: `logic.ts` / `store.ts` / `client/`の直接呼び出し
 
@@ -432,10 +470,12 @@ shared/ はdomainフォルダをimportしない。
 
 - `client/client.ts`：外部API呼び出し（WorkflowはfetchやAxiosを直接使わない）
 - `client/adapter.ts`：外部API語彙→ドメイン語彙への変換。外部エラー→DomainError（Result.err）またはTechnicalError（throw）
+- domainのWorkflowは`client/adapter.ts`を直接importしてよい。`client/client.ts`を直接呼ぶのは禁止（必ずadapter経由）。adapterは外部の語彙をドメインの語彙に翻訳済みなので、domainから見ればstoreと同じ立場にある
 
 #### domainXxx/ 内のルール（Lv1〜5のルールが各domainに適用される）
 
-- `workflow.ts`：App層からパース済み入力を受け取る。ORM直接importは禁止
+- `parse.ts`：このdomainの入力スキーマ。ルールはLv3の`parse.ts`と同じ
+- `workflow.ts`：`routes.ts`でparse済みの入力とプリンシパルを受け取る。ORM直接importは禁止。外部APIは`client/adapter.ts`経由で呼ぶ
 - `logic.ts`：ドメインprefix命名必須、Result型、テスト推奨（Lv7でError化）
 - `store.ts`：命名規則違反は**❌ Error**（Lv4の💡 HintからLv6でError化）、ORM型の戻り値禁止
 
@@ -444,9 +484,9 @@ shared/ はdomainフォルダをimportしない。
 ```ts
 // domainUser/routes.ts
 export const userRoutes = (r: Router) => {
-  r.get('/users',     slime.auth(), ListUsersWorkflow)
-  r.post('/users',    slime.auth(), CreateUserWorkflow)
-  r.get('/users/:id', slime.auth(), GetUserWorkflow)
+  r.get('/users',     slime.auth(), json(ListUsersWorkflow))
+  r.post('/users',    slime.auth(), json(parseCreateUser, CreateUserWorkflow, { status: 201 }))
+  r.get('/users/:id', slime.auth(), json(parseGetUser, GetUserWorkflow))
 }
 ```
 
@@ -454,6 +494,7 @@ export const userRoutes = (r: Router) => {
 
 - 依存宣言にないdomain間のimport → ❌ Error
 - 依存宣言に循環がある → ❌ Error
+- domainが`client/client.ts`を直接importしている（adapterを経由していない） → ❌ Error
 - `app/route.ts` にルート定義がある（集約のみのはず） → ⚠️ Warning
 - `store.ts` 命名規則違反 → ❌ Error（Lv4の💡 HintからLv6でError化）
 - `store.ts` がORM型を戻り値に使っている → ❌ Error
@@ -465,7 +506,8 @@ export const userRoutes = (r: Router) => {
 
 - ドメインフォルダ分割（`app/` / `shared/` / `client/` / `domainXxx/`）
 - `domainXxx/routes.ts`：URLパターン・Middleware・Workflowの対応をdomainに同居
-- `client/adapter.ts`：腐敗防止層の明示化
+- `client/adapter.ts`：腐敗防止層の明示化（domainのWorkflowから直接呼ぶ）
+- `domainXxx/parse.ts`：parseをdomainへ移動（`app/parse.ts`は共有スキーマのみ）
 - store命名規則違反がErrorに昇格（Lv4の推奨 → Lv6の強制）
 - ドメイン間の依存をDAGとして宣言（多くのdomainが使う能力は最上流のdomainとして扱う）
 
@@ -635,14 +677,13 @@ export const createUserWorkflow = async (input: ValidatedInput): Promise<UserCre
 }
 
 // app/workflow.ts — イベントを受け取って後続に渡す
-export const CreateUserWorkflow = async (req, res) => {
-  const valid = parseCreateUser(req.body)
-  const event = await createUserWorkflow(valid)
+export const CreateUserWorkflow = async (input: CreateUserInput) => {
+  const event = await createUserWorkflow(input)
 
   await notificationWorkflow(event)       // 同期・重要な後続処理
   defer(() => analyticsWorkflow(event))   // 非同期・失敗許容な副作用
 
-  res.status(201).json(event.payload)
+  return event.payload
 }
 ```
 
@@ -898,12 +939,12 @@ HTTPメソッドが自然にCQRSに対応する：
 // domainUser/routes.ts
 export const userRoutes = (r: Router) => {
   // Query側
-  r.get('/users',       slime.auth(), GetUserListWorkflow)
-  r.get('/users/:id',   slime.auth(), GetUserWorkflow)
+  r.get('/users',        slime.auth(), json(GetUserListWorkflow))
+  r.get('/users/:id',    slime.auth(), json(parseGetUser, GetUserWorkflow))
   // Command側
-  r.post('/users',      slime.auth(), CreateUserWorkflow)
-  r.patch('/users/:id', slime.auth(), UpdateUserWorkflow)
-  r.delete('/users/:id', slime.auth(), DeleteUserWorkflow)
+  r.post('/users',       slime.auth(), json(parseCreateUser, CreateUserWorkflow, { status: 201 }))
+  r.patch('/users/:id',  slime.auth(), json(parseUpdateUser, UpdateUserWorkflow))
+  r.delete('/users/:id', slime.auth(), json(parseDeleteUser, DeleteUserWorkflow, { status: 204 }))
 }
 ```
 

@@ -130,7 +130,7 @@ export const UpdateProfileWorkflow = async (input: ValidatedInput) => {
 - Domains must not import from `orchestrate-` folders.
 
 ### Layer rules within each domain
-- `workflow.ts`: orchestrates — calls parse/store/logic — never imports ORM directly.
+- `workflow.ts`: receives parsed input and the principal — calls store/logic and `client/adapter.ts` — never imports ORM directly, never touches HTTP objects.
 - `logic.ts`: pure functions with domain-prefixed names, `Result` for fallible operations. Decides resource-level authorization from the principal and the loaded resource.
 - `logic.test.ts`: **mandatory** — missing test file is a ❌ Error at Lv7.
 - `store.ts`: `find*` / `list*` / `get*` / `count*` / `search*` / `create*` / `save*` / `update*` / `delete*` / `remove*` naming; no ORM types in return values.
@@ -149,7 +149,7 @@ export const UpdateProfileWorkflow = async (input: ValidatedInput) => {
 
 - `shared/utility.ts`, `shared/smallLogic.ts`: pure functions only (no side effects, no DB).
 - `shared/store.ts`: shared DB access for data not yet assigned to a domain.
-- `client/client.ts` + `client/adapter.ts`: external API calls and anti-corruption layer.
+- `client/client.ts` + `client/adapter.ts`: external API calls and anti-corruption layer. Domains call the adapter, never `client.ts` directly.
 
 ---
 

@@ -110,13 +110,15 @@ const CreateUserWorkflow = ()=>{
 
 ### アーキテクチャルール
 - Workflow内でparse相当の処理を書かない
+- parseの呼び出しとWorkflowの組み合わせはrouteで行う（WorkflowはHTTPのリクエストやレスポンスに触れない）
 - Parseからのリソースアクセス（DB・外部API等）禁止
 
 > 💧 **Kaachan/Slime**: 自動検知・`slime export:schema` / `slime export:openapi`の詳細は[FW文書](./🤤%20僕の考えた最強の次世代Webアプリケーションフレームワーク（案）.md#lv-3-1)参照
 
 ### 概念コード
 ```ts
-// route.tsは省略
+// route.ts（parseとWorkflowを組み合わせるのはrouteの仕事）
+r.post('/user', json(parseCreateUser, CreateUserWorkflow))
 
 // parse.ts
 type CreateUserInput = { name: string; email: string }
@@ -127,15 +129,16 @@ export const parseCreateUser = (input: unknown): CreateUserInput => {
   return { name: input.name, email: input.email }
 }
 
-// CreateUserWorkflow.ts
-export const CreateUserWorkflow = (input: unknown) => {
-  const valid = parseCreateUser(input)
-
+// CreateUserWorkflow.ts（HTTPを知らない。型付きの入力を受け取るだけ）
+export const CreateUserWorkflow = (input: CreateUserInput) => {
   // ここからビジネスロジック（Lv5以降で整理していく）
-  const user = saveUser(valid)
+  const user = saveUser(input)
   return user
 }
 ```
+
+`json(parse, workflow)`は、リクエストをparseに通した入力と、Middlewareが確定したプリンシパルをWorkflowに渡し、戻り値をJSONで返す関数だ（後述の「残課題：フロントエンドの扱い」で出てくる応答形式の関数と同じもの）。おかげでWorkflowはHTTPを知らずに済み、バッチやキューやテストからも同じ形で呼べる。Workflowの引数は入力、プリンシパルの順で、プリンシパルを使わないなら省略できる。
+CookieやリダイレクトのようにHTTP固有の操作がどうしても必要なルートだけは、route.tsに薄いハンドラーを直接書いてよい。ただしそこでやっていいのはHTTPの入出力だけだ。
 
 > 💡 **ADR**: [なぜWorkflowはHTTPに依存しない設計になっているか](./Kaachan%26Slime%26Slime%20Architecture構想の設計根拠、補足資料.md#adr-lv3なぜworkflowはhttpに依存しない設計になっているか)
 
@@ -186,26 +189,22 @@ export const sendWelcomeMail = async (email: string) => {
 }
 
 //Workflow.ts
-export const CreateUserWorkflow = async (input: unknown) => {
-  const valid = parseCreateUser(input)
-
-  const exists = await findUserByEmail(valid.email)
+export const CreateUserWorkflow = async (input: CreateUserInput) => {
+  const exists = await findUserByEmail(input.email)
   if (exists) {
     throw new Error("User already exists")
   }
 
-  const user = await saveUser(valid)
+  const user = await saveUser(input)
   await sendWelcomeMail(user.email)
 
   return user
 }
 
 // 複数Storeをまたぐトランザクションが必要な場合
-export const CreateUserWithAuditWorkflow = async (input: unknown) => {
-  const valid = parseCreateUser(input)
-
+export const CreateUserWithAuditWorkflow = async (input: CreateUserInput) => {
   return withTransaction(async () => {  // ORM固有のトランザクションAPIは直書きしない
-    const user = await saveUser(valid)        // 同じトランザクション内
+    const user = await saveUser(input)        // 同じトランザクション内
     await saveAuditLog(user.id, "USER_CREATED") // 同じトランザクション内
     return user
   })
@@ -260,25 +259,21 @@ export const userCanCreate = (alreadyExists: boolean): Result<void, "USER_ALREAD
 // ⚠️ 異なるprefixが混在すると型依存グラフ解析と合わせて警告
 // export const orderCanPlace = (stock: number): Result<void, "OUT_OF_STOCK"> => ...
 
-// CreateUserWorkflow.ts
-import { parseCreateUser } from "./parse"
+// CreateUserWorkflow.ts（入力境界のparseはrouteで済んでいる）
 import { userCanCreate } from "./logic"  // prefix付き関数名
 import { findUserByEmail, saveUser } from "./store"
 import { sendWelcomeMail } from "./client"
 
-export const CreateUserWorkflow = async (input: unknown) => {
-  // 入力境界
-  const valid = parseCreateUser(input)
-
+export const CreateUserWorkflow = async (input: CreateUserInput) => {
   // 状態取得（副作用）
-  const exists = await findUserByEmail(valid.email)
+  const exists = await findUserByEmail(input.email)
 
   // 純粋ビジネス判断（Resultで返ってくる）
   const result = userCanCreate(!!exists)
   if (!result.ok) throw new Error(result.error)  // WorkflowはResultを受け取ってthrow可
 
   // 永続化（副作用）
-  const user = await saveUser(valid)
+  const user = await saveUser(input)
 
   // 外部通信（副作用）
   await sendWelcomeMail(user.email)
@@ -455,11 +450,9 @@ Lv7は正直Lv6の延長戦だと思っていて、メインの課題は **「�
 ### 概念コード
 ```ts
 // defer() 使用例：コミット後に実行したい処理をトランザクション外に追い出す
-export const CreateUserWorkflow = async (input: unknown) => {
-  const valid = parseCreateUser(input)
-
+export const CreateUserWorkflow = async (input: CreateUserInput) => {
   return withTransaction(async () => {
-    const user = await saveUser(valid)
+    const user = await saveUser(input)
 
     defer(async () => {
       await sendWelcomeMail(user.email)  // コミット後に実行（ロック時間に含まれない）
@@ -558,9 +551,8 @@ export const createUserWorkflow = async (input: ValidatedInput): Promise<UserCre
 }
 
 // app/workflow.ts（App層がイベントを受け取って後続に渡す）
-export const CreateUserWorkflow = async (input: unknown) => {
-  const valid = parseCreateUser(input)
-  const event = await createUserWorkflow(valid)
+export const CreateUserWorkflow = async (input: CreateUserInput) => {
+  const event = await createUserWorkflow(input)
 
   await notificationWorkflow(event)             // 同期・重要な後続処理
   defer(() => analyticsWorkflow(event))         // 非同期・失敗許容な副作用
@@ -569,7 +561,7 @@ export const CreateUserWorkflow = async (input: unknown) => {
 }
 
 // orchestrate-order-inventory/workflow.ts（原子性が必要な処理はorchestrate-が担当）
-export const createOrderWithInventory = (input: unknown) =>
+export const createOrderWithInventory = (input: CreateOrderInput) =>
   withTransaction(async () => {
     const event = await orderDomain.createOrder(input)
     await inventoryDomain.deductStock(event.payload.items)  // 失敗したらロールバック
@@ -1021,6 +1013,8 @@ route.ws('/chat',           ws(ChatWorkflow))             // WebSocket
 ```
 
 **Workflow/Logic/Store/Portの層は一切変わらない。変わるのはRoute定義のResponse形式だけ。** これはParse層が「HTTPから来たかバッチから来たかをWorkflowに知らせない」のと対称的な設計だ。
+
+入力のあるルートでは、応答形式の関数がparseも受け取る（`json(parseCreateUser, CreateUserWorkflow)`）。parseを通した入力とMiddlewareが確定したプリンシパルをWorkflowに渡し、戻り値を指定の形式で返す。Lv3以降のroute定義はすべてこの形になる。
 
 ### バッチ処理・非同期処理の起動口
 
