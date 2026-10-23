@@ -91,6 +91,20 @@ export const CreateUserWorkflow = async (req: Request, res: Response) => {
 
 ---
 
+## What Kaachan Checks at Lv2
+
+<!-- BEGIN GENERATED: kaachan-checks lv=2 （src/rules-catalog.ts から自動生成。手で編集しない） -->
+Severity: 💡 Hint = information, ⚠️ Warning = likely problem, ❌ Error = violates this level's rules.
+
+- ⚠️ Warning — `workflow.ts` imports an auth library directly (that is middleware's job)
+- ⚠️ Warning — `workflow.ts` exceeds ~500 lines
+- 💡 Hint — API routes are defined outside an `/api` group
+- 💡 Hint — A route handler does work other than HTTP I/O (store, logic, or DB calls)
+- 💡 Hint — `workflow.ts` exceeds ~300 lines or ~10 functions
+<!-- END GENERATED -->
+
+---
+
 ## Next Step: Lv3
 
 To advance to Lv3, introduce:

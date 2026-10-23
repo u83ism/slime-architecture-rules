@@ -13,6 +13,7 @@ description: docs/ja/ のドキュメントを読み、rules/_content/ 以下の
 
 `docs/ja/` 以下の全ファイルを読んでください。以下に注目します：
 
+- 特に`Lv別アーキテクチャリファレンス.md`を中心に読む（文書間で食い違ったらリファレンスが正本）
 - 各Lvで導入されるファイル・フォルダとその責務
 - 各レイヤーの「やること・やらないこと」ルール
 - Kaachanが静的検査する項目（Hint / Warning / Error の閾値を含む）
@@ -47,6 +48,7 @@ description: docs/ja/ のドキュメントを読み、rules/_content/ 以下の
 - `_content/` ファイルは**英語**で記述してください。
 - 既存の構造（Project Structure / Layer Rules / Error Handling / What Kaachan Checks / Guidance for AI Assistants / Next Step）を維持してください。
 - ドキュメントに書かれていない推測や補完は行わないでください。
+- `<!-- BEGIN GENERATED ... -->` と `<!-- END GENERATED -->` で囲まれた範囲（"What Kaachan Checks at LvN" の節）は手で編集しないでください。Kaachanの検査項目と重大度は `src/rules-catalog.ts` が唯一の正です。検査項目の追加・重大度の変更が必要なら、`src/rules-catalog.ts` を編集してください（リファレンスとFW文書の一覧も同時に更新されます）。
 
 ### Step 6 — ビルドして反映する
 
@@ -54,4 +56,4 @@ description: docs/ja/ のドキュメントを読み、rules/_content/ 以下の
 npm run build:rules
 ```
 
-を実行して、ツール別フォルダ（`claude/`, `codex/`, `gemini/`, `cursor/`）に変更を反映してください。
+を実行して、ツール別フォルダ（`claude/`, `codex/`, `gemini/`, `cursor/`）に変更を反映してください。このコマンドは先に `src/rules-catalog.ts` から検査項目の一覧を生成し直します。

@@ -182,14 +182,34 @@ export default {
 
 ## What Kaachan Checks at Lv5
 
-- `logic.ts` does not import from `store.ts`, `client.ts`, or any DB/ORM module.
-- Logic function names have a domain prefix (`userCan*`, `orderCan*`, `calcOrder*`, etc.).
-- Logic functions that can fail return `Result` type — not `throw`.
-- `workflow.ts` does not import ORM/DB modules directly.
-- `store.ts` function names follow `find*` / `list*` / `get*` / `count*` / `search*` / `create*` / `save*` / `update*` / `delete*` / `remove*` conventions (💡 Hint).
-- `store.ts` does not use ORM types as return types.
-- If `logic.ts` exceeds ~300 lines or ~10 functions, Kaachan emits a 💡 Hint to consider splitting into `logic/`.
-- If `logic.ts` exceeds ~500 lines or mixes domain prefixes, Kaachan emits a ⚠️ Warning.
+<!-- BEGIN GENERATED: kaachan-checks lv=5 （src/rules-catalog.ts から自動生成。手で編集しない） -->
+Severity: 💡 Hint = information, ⚠️ Warning = likely problem, ❌ Error = violates this level's rules.
+
+- ❌ Error — parse imports a DB/ORM module
+- ❌ Error — A file in `parse/` exceeds ~300 lines
+- ❌ Error — A workflow imports an ORM/DB module directly
+- ❌ Error — logic imports store, client, or a DB/ORM module
+- ❌ Error — logic throws (return a `Result` instead)
+- ❌ Error — A file in `logic/` exceeds ~300 lines or still mixes domain prefixes
+- ⚠️ Warning — A route handler does work other than HTTP I/O (store, logic, or DB calls)
+- ⚠️ Warning — `workflow.ts` imports an auth library directly (that is middleware's job)
+- ⚠️ Warning — `workflow.ts` exceeds ~500 lines
+- ⚠️ Warning — A workflow touches HTTP request, response, or context objects
+- ⚠️ Warning — A workflow parses raw input directly (e.g., `JSON.parse()`)
+- ⚠️ Warning — `parse.ts` exceeds ~500 lines (split into `parse/`)
+- ⚠️ Warning — A workflow calls an ORM-specific transaction API directly (use `withTransaction()`)
+- ⚠️ Warning — A store function returns an ORM type
+- ⚠️ Warning — A logic function has no domain prefix (`userCan*`, etc.)
+- ⚠️ Warning — logic has no corresponding test file (`logic.test.ts`)
+- ⚠️ Warning — `logic.ts` exceeds ~500 lines, mixes domain prefixes, or contains function groups whose type dependencies do not intersect
+- 💡 Hint — API routes are defined outside an `/api` group
+- 💡 Hint — `workflow.ts` exceeds ~300 lines or ~10 functions
+- 💡 Hint — A workflow calls a parse function (parsing belongs in route)
+- 💡 Hint — `parse.ts` exceeds ~300 lines or ~10 functions (shared schemas are allowed)
+- 💡 Hint — A store function name violates the naming convention (`find*` / `list*` / `get*` / `count*` / `search*` / `create*` / `save*` / `update*` / `delete*` / `remove*`)
+- 💡 Hint — `logic.ts` exceeds ~300 lines or ~10 functions (consider splitting into `logic/`)
+- 💡 Hint — `slime.config.ts` is missing (it maps domain error codes to HTTP status codes)
+<!-- END GENERATED -->
 
 ---
 

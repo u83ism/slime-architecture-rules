@@ -34,8 +34,13 @@ rules/
     ...
     lv10.mdc
 
+src/
+  rules-catalog.ts   ← Kaachanの検査項目と重大度（唯一の正）
+  rules-targets.ts   ← AIツールごとの配置先とfrontmatter
+
 scripts/
-  build-rules.ts     ← _content/ → 各ツール向けファイルを生成するスクリプト
+  generate-checks.ts ← rules-catalog.ts → テンプレートと文書の検査項目一覧を生成
+  build-rules.ts     ← generate-checks を実行してから、_content/ → 各ツール向けファイルを生成
 ```
 
 ---
@@ -46,11 +51,13 @@ scripts/
 
 rulesファイルの内容の大部分は「AIに守らせたいルールの散文」であり、`LEVEL_DEFINITIONS` 等のデータから機械的に生成できるものではない。内容は人間が書く必要があるため、静的テンプレートが適切。
 
+例外は「What Kaachan Checks at LvN」の節で、ここだけは `src/rules-catalog.ts` から自動生成する。重大度は Kaachan の実装・リファレンス・FW文書と食い違いやすく、データとして1か所に置かないと同期が保てないため。生成範囲は `<!-- BEGIN GENERATED ... -->` と `<!-- END GENERATED -->` の目印で囲まれており、この中は手で編集しない。
+
 ### なぜ_contentが正本か（ツール別フォルダが正本でないか）
 
 Claude・Codex・GeminiはMarkdownをそのまま使い、Cursorだけfrontmatterが追加で必要。この差異のため、**共通内容を`_content/`に一本化**し、ツール別の差分（Cursorのfrontmatter等）をビルドスクリプトで付与するDRY構成にした。
 
-新たなAIツールに対応する場合は `scripts/build-rules.ts` の `TOOLS` 配列に1エントリ追加するだけでよい。
+新たなAIツールに対応する場合は `src/rules-targets.ts` の `RULES_TARGETS` 配列に1エントリ追加するだけでよい。この定義はパッケージから export されるので、Kaachanの `export:rules` も同じ定義を使える。
 
 ### なぜLv1〜10の全レベルか（マイルストーン単位でないか）
 
@@ -101,6 +108,16 @@ npm run build:rules
 
 `_content/` を直接編集し、`npm run build:rules` で全ツール向けファイルを再生成する。ツール別フォルダ（`claude/`, `cursor/` 等）は**直接編集しない**。
 
+Kaachanの検査項目や重大度を変えるときは、テンプレートではなく `src/rules-catalog.ts` を編集してから `npm run build:rules` を実行する。テンプレート・リファレンス・FW文書の検査項目一覧がまとめて更新される。
+
+---
+
+## パッケージとしての配布
+
+テンプレートの正本（`rules/_content/`）は `@u83ism/architecture-rules` に同梱して配布する。利用側は `@u83ism/architecture-rules/rules/lv5.md` のように参照できる（`rulesTemplateSpecifier(level)` がこの指定子を返す）。
+
+Kaachanの `export:rules` は、判定したLvのテンプレートを読み、`RULES_TARGETS` の定義に従ってツール別の差分（Cursorのfrontmatter等）を付けて出力するだけにする。AI向けの制約文をKaachan側に別途持たない（以前はKaachan内に直書きの写しがあり、テンプレートと食い違っていた）。
+
 ---
 
 ## 各ツールの配置先まとめ
@@ -121,7 +138,7 @@ npm run build:rules
 1. **プロジェクト構成** — そのレベルで存在するファイル/フォルダの一覧
 2. **各レイヤーのルール** — 何をすべきか・何をすべきでないかのコード例つき説明
 3. **エラーハンドリング** — DomainError / TechnicalError の扱い
-4. **Kaachanが静的検査する項目** — AIとKaachanの役割分担を明示
+4. **Kaachanが静的検査する項目** — AIとKaachanの役割分担を明示（`src/rules-catalog.ts` から自動生成。そのLvで有効な全項目を重大度順に並べる）
 5. **AIアシスタント向けガイダンス** — 特定の状況でAIがどう動くべきかの指針
 6. **次のレベルへ進むために必要なもの** — Lv昇格のトリガー情報
 

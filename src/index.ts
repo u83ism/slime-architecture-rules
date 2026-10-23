@@ -14,3 +14,18 @@ export {
   getLevelDefinition,
 } from "./levels.js"
 export type { ArchitectureLevel, LevelDefinition } from "./levels.js"
+
+export {
+  RULE_CATALOG,
+  getRuleSeverity,
+  getRulesForLevel,
+  getRuleDefinition,
+} from "./rules-catalog.js"
+export type { RuleDefinition, SeverityStep } from "./rules-catalog.js"
+
+export {
+  RULES_TARGETS,
+  rulesTemplateSpecifier,
+  renderRulesForTarget,
+} from "./rules-targets.js"
+export type { RulesTarget } from "./rules-targets.js"

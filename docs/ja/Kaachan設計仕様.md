@@ -45,6 +45,8 @@ Kaachanが「何が起きているか」を検出し、rulesファイルが「�
 | ⚠️ Warning | 500行超過 または prefix混在 または 型依存グラフで非交差グループ検出 | 構造的問題あり |
 | ❌ Error | `logic/`内の各ファイルが300行超 または prefix混在が未解消 | 移行を阻止 |
 
+> 重大度の正は共通定義パッケージの `src/rules-catalog.ts`（`logic-size-hint` / `logic-size-warning` / `logic-folder-file-too-large`）。この表は説明用で、値を変えるときはそちらを編集する。
+
 ---
 
 ## Fat Parse問題

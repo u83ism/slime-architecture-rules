@@ -1,6 +1,6 @@
 {
   "name": "@u83ism/architecture-rules",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Shared architecture rule definitions for Slime Architecture — levels, layers, folder patterns, and severity types.",
   "type": "module",
   "main": "./dist/index.js",
@@ -9,15 +9,19 @@
     ".": {
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
-    }
+    },
+    "./rules/*": "./rules/_content/*"
   },
   "files": [
-    "dist"
+    "dist",
+    "rules/_content"
   ],
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "build:rules": "tsx scripts/build-rules.ts"
+    "generate:checks": "tsx scripts/generate-checks.ts",
+    "build:rules": "tsx scripts/build-rules.ts",
+    "build:qiita": "tsx scripts/build-qiita.ts"
   },
   "devDependencies": {
     "tsx": "^4.19.0",

@@ -167,10 +167,26 @@ if (e.code === 'card_declined' && user.retryCount > 3) return err("CARD_BLOCKED"
 
 ## What Kaachan Checks at Lv4
 
-- `workflow.ts` does not import ORM/DB modules directly (DB access must go through `store.ts`).
-- `store.ts` function names follow `find*` / `list*` / `get*` / `count*` / `search*` / `create*` / `save*` / `update*` / `delete*` / `remove*` conventions (💡 Hint at Lv4).
-- `store.ts` does not use ORM types as return types.
-- `parse.ts` does not import from DB/ORM modules.
+<!-- BEGIN GENERATED: kaachan-checks lv=4 （src/rules-catalog.ts から自動生成。手で編集しない） -->
+Severity: 💡 Hint = information, ⚠️ Warning = likely problem, ❌ Error = violates this level's rules.
+
+- ❌ Error — parse imports a DB/ORM module
+- ❌ Error — A file in `parse/` exceeds ~300 lines
+- ❌ Error — A workflow imports an ORM/DB module directly
+- ⚠️ Warning — A route handler does work other than HTTP I/O (store, logic, or DB calls)
+- ⚠️ Warning — `workflow.ts` imports an auth library directly (that is middleware's job)
+- ⚠️ Warning — `workflow.ts` exceeds ~500 lines
+- ⚠️ Warning — A workflow touches HTTP request, response, or context objects
+- ⚠️ Warning — A workflow parses raw input directly (e.g., `JSON.parse()`)
+- ⚠️ Warning — `parse.ts` exceeds ~500 lines (split into `parse/`)
+- ⚠️ Warning — A workflow calls an ORM-specific transaction API directly (use `withTransaction()`)
+- ⚠️ Warning — A store function returns an ORM type
+- 💡 Hint — API routes are defined outside an `/api` group
+- 💡 Hint — `workflow.ts` exceeds ~300 lines or ~10 functions
+- 💡 Hint — A workflow calls a parse function (parsing belongs in route)
+- 💡 Hint — `parse.ts` exceeds ~300 lines or ~10 functions (shared schemas are allowed)
+- 💡 Hint — A store function name violates the naming convention (`find*` / `list*` / `get*` / `count*` / `search*` / `create*` / `save*` / `update*` / `delete*` / `remove*`)
+<!-- END GENERATED -->
 
 ---
 

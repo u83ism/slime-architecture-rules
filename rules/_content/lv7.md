@@ -187,13 +187,54 @@ export default {
 
 ## What Kaachan Checks at Lv7
 
-- Orchestrate folders follow `orchestrate-[a-z]` naming (kebab-case with `orchestrate-` prefix).
-- Domain folders do not import from `orchestrate-` folders.
-- No orchestrate-to-orchestrate imports.
-- `orchestrate-` folders do not import from `app/`.
-- **`logic.test.ts` missing in any domain folder → ❌ Error** (upgraded from 💡 Hint at Lv6).
-- App layer does not contain `logic.ts`, `store.ts`, or direct `client/` imports.
-- All Lv6 checks continue to apply.
+<!-- BEGIN GENERATED: kaachan-checks lv=7 （src/rules-catalog.ts から自動生成。手で編集しない） -->
+Severity: 💡 Hint = information, ⚠️ Warning = likely problem, ❌ Error = violates this level's rules.
+
+- ❌ Error — parse imports a DB/ORM module
+- ❌ Error — A file in `parse/` exceeds ~300 lines
+- ❌ Error — A workflow imports an ORM/DB module directly
+- ❌ Error — A store function name violates the naming convention (`find*` / `list*` / `get*` / `count*` / `search*` / `create*` / `save*` / `update*` / `delete*` / `remove*`)
+- ❌ Error — A store function returns an ORM type
+- ❌ Error — logic imports store, client, or a DB/ORM module
+- ❌ Error — logic throws (return a `Result` instead)
+- ❌ Error — logic has no corresponding test file (`logic.test.ts`)
+- ❌ Error — A file in `logic/` exceeds ~300 lines or still mixes domain prefixes
+- ❌ Error — An inter-domain import that is not in the dependency declaration
+- ❌ Error — The domain dependency declaration contains a cycle
+- ❌ Error — `client/client.ts` is imported directly (bypassing `client/adapter.ts`)
+- ❌ Error — `shared/utility.ts` or `shared/smallLogic.ts` has side effects
+- ❌ Error — A file in `shared/` is too large
+- ❌ Error — The App layer is too large
+- ❌ Error — `app/store.ts` exists (the App layer must not own DB access)
+- ❌ Error — `app/client.ts` exists (move it to `client/`)
+- ❌ Error — The App layer contains logic (`app/logic.ts` or business judgment)
+- ❌ Error — A domain imports from an `orchestrate-` folder
+- ❌ Error — An `orchestrate-` folder imports from another `orchestrate-` folder
+- ❌ Error — An `orchestrate-` folder imports from `app/`
+- ⚠️ Warning — A route handler does work other than HTTP I/O (store, logic, or DB calls)
+- ⚠️ Warning — `workflow.ts` imports an auth library directly (that is middleware's job)
+- ⚠️ Warning — `workflow.ts` exceeds ~500 lines
+- ⚠️ Warning — A workflow touches HTTP request, response, or context objects
+- ⚠️ Warning — A workflow parses raw input directly (e.g., `JSON.parse()`)
+- ⚠️ Warning — `parse.ts` exceeds ~500 lines (split into `parse/`)
+- ⚠️ Warning — A workflow calls an ORM-specific transaction API directly (use `withTransaction()`)
+- ⚠️ Warning — A logic function has no domain prefix (`userCan*`, etc.)
+- ⚠️ Warning — `logic.ts` exceeds ~500 lines, mixes domain prefixes, or contains function groups whose type dependencies do not intersect
+- ⚠️ Warning — `shared/` imports from a domain folder
+- ⚠️ Warning — `app/route.ts` defines routes (move them to `domainXxx/routes.ts`)
+- ⚠️ Warning — `app/route.ts` is too large
+- ⚠️ Warning — A route references a workflow file that does not exist (dead route candidate)
+- ⚠️ Warning — A route past its `sunset` date still exists
+- 💡 Hint — API routes are defined outside an `/api` group
+- 💡 Hint — `workflow.ts` exceeds ~300 lines or ~10 functions
+- 💡 Hint — A workflow calls a parse function (parsing belongs in route)
+- 💡 Hint — `parse.ts` exceeds ~300 lines or ~10 functions (shared schemas are allowed)
+- 💡 Hint — `logic.ts` exceeds ~300 lines or ~10 functions (consider splitting into `logic/`)
+- 💡 Hint — `slime.config.ts` is missing (it maps domain error codes to HTTP status codes)
+- 💡 Hint — A workflow is not referenced by any route (unreachable workflow candidate)
+- 💡 Hint — A domain folder has no `routes.ts`
+- 💡 Hint — Non-DB async work (email, external API calls) inside `withTransaction()` (suggests `defer()`; opt-in)
+<!-- END GENERATED -->
 
 ---
 

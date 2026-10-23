@@ -126,10 +126,22 @@ export const parseCreateUser = async (body: unknown) => {
 
 ## What Kaachan Checks at Lv3
 
-- `parse.ts` does not import from DB/ORM modules.
-- `workflow.ts` does not touch HTTP request, response, or context objects (⚠️ Warning).
-- `workflow.ts` does not call parse functions — parsing belongs in `route.ts` (💡 Hint).
-- `route.ts` handlers do only HTTP I/O — no store, logic, or DB calls (⚠️ Warning).
+<!-- BEGIN GENERATED: kaachan-checks lv=3 （src/rules-catalog.ts から自動生成。手で編集しない） -->
+Severity: 💡 Hint = information, ⚠️ Warning = likely problem, ❌ Error = violates this level's rules.
+
+- ❌ Error — parse imports a DB/ORM module
+- ❌ Error — A file in `parse/` exceeds ~300 lines
+- ⚠️ Warning — A route handler does work other than HTTP I/O (store, logic, or DB calls)
+- ⚠️ Warning — `workflow.ts` imports an auth library directly (that is middleware's job)
+- ⚠️ Warning — `workflow.ts` exceeds ~500 lines
+- ⚠️ Warning — A workflow touches HTTP request, response, or context objects
+- ⚠️ Warning — A workflow parses raw input directly (e.g., `JSON.parse()`)
+- ⚠️ Warning — `parse.ts` exceeds ~500 lines (split into `parse/`)
+- 💡 Hint — API routes are defined outside an `/api` group
+- 💡 Hint — `workflow.ts` exceeds ~300 lines or ~10 functions
+- 💡 Hint — A workflow calls a parse function (parsing belongs in route)
+- 💡 Hint — `parse.ts` exceeds ~300 lines or ~10 functions (shared schemas are allowed)
+<!-- END GENERATED -->
 
 ---
 

@@ -9,7 +9,7 @@ export const LAYER_FILES = {
   WORKFLOW: "workflow.ts",
   MIDDLEWARE: "middleware.ts",
   PARSE: "parse.ts",
-  REPOSITORY: "repository.ts",
+  STORE: "store.ts",
   CLIENT: "client.ts",
   LOGIC: "logic.ts",
   PORTS: "ports.ts",

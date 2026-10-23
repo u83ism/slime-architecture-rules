@@ -154,6 +154,8 @@ Kaachanと設計解析＆改善提案プログラム（Linter＆自動refactor�
 アーキテクチャ文書の各レベルに対応するKaachanの自動検知ルールと、Slimeが提供するAPIをまとめる。
 
 > アーキテクチャルール（何を守るべきか）は[アーキテクチャ文書](./🤤%20僕の考えた最強の次世代Webアプリケーションアーキテクチャ（進化論）.md)参照。本セクションは「Kaachanがどう検知するか」「Slimeが何を提供するか」の詳細。
+>
+> 各Lvの「Kaachanのお叱りポイント」は、そのLvで新しく加わる検査と重大度が変わる検査の一覧。検査項目と重大度は共通定義パッケージの `src/rules-catalog.ts` で一元管理しており、この一覧もそこから自動生成している。
 
 ### Lv 2
 
@@ -170,9 +172,13 @@ route.post('/api', myCustomMiddleware, SomeWorkflow)
 ```
 
 #### Kaachanのお叱りポイント
-- routeに実処理を書いたら ❌ Error
-- Workflow内に認証・認可・レートリミット等の横断的処理を書いたら ⚠️ Warning（`middleware.ts`への移動を促す）
-- `/api/` グループなしでAPIルートを定義したら 💡 Hint（「将来webルートを追加する予定があるなら `/api/` 名前空間の確保を検討してください」）
+<!-- BEGIN GENERATED: kaachan-checks lv=2 （src/rules-catalog.ts から自動生成。手で編集しない） -->
+- `/api` グループの外でAPIルートを定義している → 💡 Hint
+- route のハンドラーがHTTPの入出力以外（store・logic・DBの呼び出し等）を行っている → 💡 Hint
+- `workflow.ts` が認証ライブラリを直接importしている（Middlewareの仕事） → ⚠️ Warning
+- `workflow.ts` が300行 / 10関数を超えている → 💡 Hint
+- `workflow.ts` が500行を超えている → ⚠️ Warning
+<!-- END GENERATED -->
 
 ---
 
@@ -183,8 +189,17 @@ route.post('/api', myCustomMiddleware, SomeWorkflow)
 - `slime export:openapi` - route定義とparseスキーマからOpenAPI 3.x specを生成。外部チームや外部クライアント向けのAPI仕様書を別途手書き不要に
 
 #### Kaachanのお叱りポイント
-- Workflow内でparse相当の処理（入力のバリデーション・型変換）を書いたら ⚠️ Warning
-- parseからDBアクセス・外部APIアクセスを行ったら ❌ Error
+<!-- BEGIN GENERATED: kaachan-checks lv=3 （src/rules-catalog.ts から自動生成。手で編集しない） -->
+- route のハンドラーがHTTPの入出力以外（store・logic・DBの呼び出し等）を行っている → ⚠️ Warning（Lv2の💡 Hintから変更）
+- parse がDB/ORMモジュールをimportしている → ❌ Error
+- workflow がHTTPのリクエスト・レスポンス・コンテキストに触れている → ⚠️ Warning
+- workflow がparse関数を呼んでいる（parseはrouteで行う） → 💡 Hint
+- workflow が `JSON.parse()` 等で入力を直接パースしている → ⚠️ Warning
+- `parse.ts` が300行 / 10関数を超えている（共通スキーマは許容） → 💡 Hint
+- `parse.ts` が500行を超えている（`parse/` への分割を促す） → ⚠️ Warning
+- `parse/` 内のファイルが300行を超えている → ❌ Error
+- Lv2までの検査はすべて継続する
+<!-- END GENERATED -->
 
 ---
 
@@ -202,12 +217,13 @@ return slime.withTransaction(async () => {
 ```
 
 #### Kaachanのお叱りポイント
-- store.ts
-  - ORM型（`Prisma.User`等）を戻り値の型として使用したら ⚠️ Warning（純粋なデータ型のみ返却可能）
-  - 関数名が命名規則（find*/list*/create*/save*等）に従っていない場合は 💡 Hint
-- workflow.ts
-  - ORM名（`prisma`, `drizzle`等）を直接importしたら ⚠️ Warning
-  - `prisma.$transaction()`等ORM固有のトランザクションAPIを直書きしたら ⚠️ Warning（`slime.withTransaction()`を使うこと）
+<!-- BEGIN GENERATED: kaachan-checks lv=4 （src/rules-catalog.ts から自動生成。手で編集しない） -->
+- workflow がORM/DBモジュールを直接importしている → ❌ Error
+- workflow がORM固有のトランザクションAPIを直書きしている（`withTransaction()` を使う） → ⚠️ Warning
+- store の関数名が命名規則（`find*` / `list*` / `get*` / `count*` / `search*` / `create*` / `save*` / `update*` / `delete*` / `remove*`）に違反している → 💡 Hint
+- store がORM型を戻り値に使っている → ⚠️ Warning
+- Lv3までの検査はすべて継続する
+<!-- END GENERATED -->
 
 ---
 
@@ -243,16 +259,17 @@ Slimeが自動カバーする範囲：Parse失敗→400 / Middleware拒否→401
 > マップに登録されていないthrowはすべてTechnicalError（500）として扱う。導入タイミングはLv5（Logic導入と同時）。
 
 #### Kaachanのお叱りポイント
-- Workflow
-  - ビジネス判断（条件分岐）を直書きしたら 💡 Hint（Logic関数への切り出しを促す）
-  - 一定規模（目安: 300行 / 関数10個）を超えたら 💡 Hint「ファイルが大きくなっています。Lv6への移行を検討してください（`slime level:next` でLv6の構造を確認）」
-- Logic
-  - LogicでのthrowはNG。Result型で返すこと → ⚠️ Warning（`new Error()` 直throwに対しても警告し、Result err + slime.config.tsへのエラー文字列マップ登録を促す）
-  - テストがないと ⚠️ Warning
-  - 関数名にドメインprefixがない場合は 💡 Hint
-  - 同一ファイルで異なるprefixが2種以上 **かつ** 閾値超過 → ⚠️ Warning（`logic/` フォルダへの分割を促す）
-  - **型依存グラフ解析**（ts-morph）：互いに型依存が交差しない関数群を自動検出 → ⚠️ Warning（ドメイン分割候補として提示）
-  - エスカレーション：💡 Hint（300行）→ ⚠️ Warning（500行 or prefix混在 or 型非交差検出）→ ❌ Error（`logic/`内ファイルが300行超）
+<!-- BEGIN GENERATED: kaachan-checks lv=5 （src/rules-catalog.ts から自動生成。手で編集しない） -->
+- logic が store / client / DB・ORMモジュールをimportしている → ❌ Error
+- logic が throw している（Result型で返す） → ❌ Error
+- logic関数にドメインprefixがない（`userCan*` 等） → ⚠️ Warning
+- logic に対応するテストファイル（`logic.test.ts`）がない → ⚠️ Warning
+- `logic.ts` が300行 / 10関数を超えている（`logic/` への分割を促す） → 💡 Hint
+- `logic.ts` が500行を超えている、prefixが混在している、または型依存が交差しない関数群がある → ⚠️ Warning
+- `logic/` 内のファイルが300行を超えている、またはprefixの混在が解消されていない → ❌ Error
+- `slime.config.ts` がない（DomainErrorとHTTPステータスの対応表を置く） → 💡 Hint
+- Lv4までの検査はすべて継続する
+<!-- END GENERATED -->
 
 ---
 
@@ -264,26 +281,27 @@ Slimeが自動カバーする範囲：Parse失敗→400 / Middleware拒否→401
   - 「WorkflowがORMを直接importしている」等の依存ルール違反をimportグラフ解析で自動検出
 
 #### Kaachanのお叱りポイント
-- App
-  - 肥大化・ビジネスロジック混在に対して ⚠️ Warning
-  - app/store.tsの存在に対して ⚠️ Warning
-  - app/client.tsは ❌ Error（client/client.tsに移動を強制）
-  - Appからのみ各ドメイン参照可能。違反は ❌ Error
-  - app/route.ts にルート定義（URLパターン・ミドルウェア付与）が残存したら ⚠️ Warning（domain/*/routes.ts への移動を促す）
-- routes
-  - ルートに指定されたWorkflowファイルが存在しない場合は ⚠️ Warning（死んだルート候補）
-  - Workflowファイルが存在するがどのルートからも参照されていない場合は 💡 Hint（到達不能Workflow候補）
-  - `sunset` 日付を過ぎたルートが残存する場合は ⚠️ Warning（廃止ルートの棚卸しを促す）
-- Shared
-  - `utility.ts` / `smallLogic.ts` 内の副作用を持つ処理に対して ❌ Error
-  - 各ファイル肥大化に対して ⚠️ Warning
-  - domainフォルダのファイルをimportしたら ⚠️ Warning
-- client
-  - client.tsを直接呼び出したら ❌ Error（adapter.ts経由のみ）
-- store
-  - 関数名が命名規則に従っていない場合は ❌ Error（Lv4でhintだったものがエラー化）
-  - query系関数内でcommandが検出されたら ❌ Error（逆も同様）
-- 依存宣言にないdomain間の参照は ❌ Error。依存宣言の循環も ❌ Error
+<!-- BEGIN GENERATED: kaachan-checks lv=6 （src/rules-catalog.ts から自動生成。手で編集しない） -->
+- store の関数名が命名規則（`find*` / `list*` / `get*` / `count*` / `search*` / `create*` / `save*` / `update*` / `delete*` / `remove*`）に違反している → ❌ Error（Lv5の💡 Hintから変更）
+- store がORM型を戻り値に使っている → ❌ Error（Lv5の⚠️ Warningから変更）
+- 依存宣言にないdomain間のimport → ❌ Error
+- domain間の依存宣言に循環がある → ❌ Error
+- `client/client.ts` を直接importしている（`client/adapter.ts` を経由していない） → ❌ Error
+- `shared/` がdomainフォルダをimportしている → ⚠️ Warning
+- `shared/utility.ts` / `shared/smallLogic.ts` に副作用がある → ❌ Error
+- `shared/` のファイルが肥大化している → ⚠️ Warning
+- App層が肥大化している → ⚠️ Warning
+- `app/store.ts` が存在する（App層はDBアクセスを持たない） → ⚠️ Warning
+- `app/client.ts` が存在する（`client/` へ移動する） → ❌ Error
+- App層がlogicを持っている（`app/logic.ts` またはビジネス判断の混在） → ⚠️ Warning
+- `app/route.ts` にルート定義がある（`domainXxx/routes.ts` へ移動する） → ⚠️ Warning
+- `app/route.ts` が肥大化している → ⚠️ Warning
+- ルート定義が存在しないWorkflowファイルを参照している（死んだルート候補） → ⚠️ Warning
+- どのルートからも参照されていないWorkflowがある（到達不能Workflow候補） → 💡 Hint
+- domainフォルダに `routes.ts` がない → 💡 Hint
+- `sunset` 日付を過ぎたルートが残っている → ⚠️ Warning
+- Lv5までの検査はすべて継続する
+<!-- END GENERATED -->
 
 ---
 
@@ -307,52 +325,67 @@ return slime.withTransaction(async () => {
 ```
 
 #### Kaachanのお叱りポイント
-- App
-  - 肥大化に対して ❌ Error
-  - logic.ts, store.ts, client.tsの存在に対して ❌ Error
-- Shared
-  - 肥大化に対して ❌ Error
-- domain
-  - `orchestrate-`フォルダへの参照を ❌ Error
-- orchestrate-
-  - Appへの参照に対して ❌ Error
-  - `orchestrate-`同士の参照に対して ❌ Error
-- Logic
-  - logic.tsに対応するlogic.test.tsが存在しない場合は ❌ Error（Lv5ではWarning、Lv7でErrorに昇格）
-- Workflow（`slime.withTransaction()` 内）
-  - 非DB非同期処理（メール送信・外部API呼び出し等）を検知したら `slime.defer()` への外出しを提案（💡 hint・opt-in設定で有効化）
+<!-- BEGIN GENERATED: kaachan-checks lv=7 （src/rules-catalog.ts から自動生成。手で編集しない） -->
+- logic に対応するテストファイル（`logic.test.ts`）がない → ❌ Error（Lv6の⚠️ Warningから変更）
+- `shared/` のファイルが肥大化している → ❌ Error（Lv6の⚠️ Warningから変更）
+- App層が肥大化している → ❌ Error（Lv6の⚠️ Warningから変更）
+- `app/store.ts` が存在する（App層はDBアクセスを持たない） → ❌ Error（Lv6の⚠️ Warningから変更）
+- App層がlogicを持っている（`app/logic.ts` またはビジネス判断の混在） → ❌ Error（Lv6の⚠️ Warningから変更）
+- domainが `orchestrate-` フォルダをimportしている → ❌ Error
+- `orchestrate-` フォルダ同士がimportし合っている → ❌ Error
+- `orchestrate-` フォルダが `app/` をimportしている → ❌ Error
+- `withTransaction()` 内に非DBの非同期処理（メール送信・外部API呼び出し等）がある（`defer()` を提案。opt-in） → 💡 Hint
+- Lv6までの検査はすべて継続する
+<!-- END GENERATED -->
 
 ---
 
 ### Lv 8
 
 #### Kaachanのお叱りポイント
-- shared/events.ts
-  - Eventがクラスインスタンスだったら ❌ Error（オブジェクト型のみ）
-  - `type` フィールド（discriminated union）がなかったら ⚠️ Warning
-- orchestrate-フォルダ
-  - `slime.withTransaction()` を伴わない処理のみで構成されている場合は ⚠️ Warning（「これはドメインイベントで書けるはず」）
-  - メール送信・外部API呼び出し等の非トランザクション処理が含まれたら ⚠️ Warning
+<!-- BEGIN GENERATED: kaachan-checks lv=8 （src/rules-catalog.ts から自動生成。手で編集しない） -->
+- `shared/events.ts` が存在しない → ⚠️ Warning
+- `shared/events.ts` がdomainや `orchestrate-` をimportしている → ❌ Error
+- イベント型がクラスを含んでいる（純粋なデータ型のみ） → ❌ Error
+- イベント型に `type` フィールド（discriminated union）がない → ⚠️ Warning
+- イベント型の `type` が大文字スネークケースでない → ⚠️ Warning
+- `orchestrate-` フォルダに `withTransaction()` がない（ドメインイベントで代替できるはず） → ⚠️ Warning
+- `orchestrate-` フォルダがメール送信・外部API呼び出し等の非トランザクション処理を含んでいる → ⚠️ Warning
+- Lv7までの検査はすべて継続する
+<!-- END GENERATED -->
 
 ---
 
 ### Lv 9
 
 #### Kaachanのお叱りポイント
-- domainフォルダ内にORM等のDBアクセスライブラリのimportが検出されたら ❌ Error
-- WorkflowがPortを引数で受け取る形式になっていない場合は ⚠️ Warning
-- infrastructureフォルダ外でORMを直接操作したら ❌ Error
+<!-- BEGIN GENERATED: kaachan-checks lv=9 （src/rules-catalog.ts から自動生成。手で編集しない） -->
+- `infrastructure/` フォルダが存在しない → ⚠️ Warning
+- domainフォルダが `infrastructure/` を直接importしている → ❌ Error
+- ORM/DBモジュールのimportが `infrastructure/` 以外にある → ❌ Error
+- `ports.ts` に実装コードがある（型定義のみ） → ❌ Error
+- `store.ts` がまだ残っている（`ports.ts` と `infrastructure/` に分離する） → ❌ Error
+- `ports.ts` があるのに、workflowがPortを引数で受け取っていない → 💡 Hint
+- Lv8までの検査はすべて継続する
+<!-- END GENERATED -->
 
 ---
 
 ### Lv 10
 
 #### Kaachanのお叱りポイント
-- command/内でReadPortを使用したら ❌ Error
-- query/で複数クエリが1ファイルに混在したら ⚠️ Warning（1ファイル1クエリ）
-- query/内ファイルの肥大化・共通化に対して ⚠️ Warning
-- command/のWorkflowが集約ルート以外を直接操作したら ❌ Error
-- query/へ集約クラス・ドメインオブジェクトを持ち込んだら ⚠️ Warning
+<!-- BEGIN GENERATED: kaachan-checks lv=10 （src/rules-catalog.ts から自動生成。手で編集しない） -->
+- domainフォルダに `command/` と `query/` がない → ⚠️ Warning
+- `command/` が `query/` をimportしている（ReadPortを含む） → ❌ Error
+- `query/` がWritePortや書き込み用アダプターをimportしている → ❌ Error
+- `query/` が書き込み操作を行っている → ❌ Error
+- `command/` のworkflowが読み取り最適化ビューモデルを返している → ⚠️ Warning
+- `query/` の1ファイルに複数のクエリがある（1ファイル1クエリ） → ⚠️ Warning
+- `query/` 内で共通化されたヘルパーが複数のクエリファイルから使われている → ⚠️ Warning
+- `query/` がドメインのlogicをimportしている（ReadPortと読み取りモデルだけを使う） → ⚠️ Warning
+- `query/` のファイルが肥大化している → 💡 Hint
+- Lv9までの検査はすべて継続する
+<!-- END GENERATED -->
 
 ---
 

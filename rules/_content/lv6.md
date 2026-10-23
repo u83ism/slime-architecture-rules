@@ -121,7 +121,7 @@ export const userRoutes = (r: Router) => {
 - Must have domain-prefixed names (`userCan*`, `orderCan*`, `calcOrder*`, etc.).
 - Decides resource-level authorization from the principal and the loaded resource (e.g., `postCanEdit(principal, post)`).
 - Fallible functions return `Result` type — no `throw`.
-- **Must be tested** (`logic.test.ts`). Missing tests are a 💡 Hint at Lv6.
+- **Must be tested** (`logic.test.ts`). Missing tests are a ⚠️ Warning at Lv6 and become a ❌ Error at Lv7.
 
 ### domainXxx/store.ts
 - Domain-specific DB reads and writes.
@@ -192,15 +192,50 @@ export default {
 
 ## What Kaachan Checks at Lv6
 
-- Domain folders follow `domain[A-Z]` naming (camelCase with `domain` prefix).
-- Inter-domain imports follow the declared dependency DAG — undeclared directions are ❌ Error.
-- The dependency declaration contains no cycles — ❌ Error if it does.
-- Domain code does not import `client/client.ts` directly (bypassing the adapter) — ❌ Error if it does.
-- `app/route.ts` does not contain inline route definitions (aggregation only) — ⚠️ Warning if violated.
-- `app/workflow.ts` does not contain `logic.ts`, `store.ts`, or `client/` code (not allowed in App layer).
-- `store.ts` function naming violations are now **❌ Error** (upgraded from 💡 Hint at Lv5).
-- `store.ts` still must not return ORM types.
-- All Lv4–Lv5 checks continue to apply within each domain.
+<!-- BEGIN GENERATED: kaachan-checks lv=6 （src/rules-catalog.ts から自動生成。手で編集しない） -->
+Severity: 💡 Hint = information, ⚠️ Warning = likely problem, ❌ Error = violates this level's rules.
+
+- ❌ Error — parse imports a DB/ORM module
+- ❌ Error — A file in `parse/` exceeds ~300 lines
+- ❌ Error — A workflow imports an ORM/DB module directly
+- ❌ Error — A store function name violates the naming convention (`find*` / `list*` / `get*` / `count*` / `search*` / `create*` / `save*` / `update*` / `delete*` / `remove*`)
+- ❌ Error — A store function returns an ORM type
+- ❌ Error — logic imports store, client, or a DB/ORM module
+- ❌ Error — logic throws (return a `Result` instead)
+- ❌ Error — A file in `logic/` exceeds ~300 lines or still mixes domain prefixes
+- ❌ Error — An inter-domain import that is not in the dependency declaration
+- ❌ Error — The domain dependency declaration contains a cycle
+- ❌ Error — `client/client.ts` is imported directly (bypassing `client/adapter.ts`)
+- ❌ Error — `shared/utility.ts` or `shared/smallLogic.ts` has side effects
+- ❌ Error — `app/client.ts` exists (move it to `client/`)
+- ⚠️ Warning — A route handler does work other than HTTP I/O (store, logic, or DB calls)
+- ⚠️ Warning — `workflow.ts` imports an auth library directly (that is middleware's job)
+- ⚠️ Warning — `workflow.ts` exceeds ~500 lines
+- ⚠️ Warning — A workflow touches HTTP request, response, or context objects
+- ⚠️ Warning — A workflow parses raw input directly (e.g., `JSON.parse()`)
+- ⚠️ Warning — `parse.ts` exceeds ~500 lines (split into `parse/`)
+- ⚠️ Warning — A workflow calls an ORM-specific transaction API directly (use `withTransaction()`)
+- ⚠️ Warning — A logic function has no domain prefix (`userCan*`, etc.)
+- ⚠️ Warning — logic has no corresponding test file (`logic.test.ts`)
+- ⚠️ Warning — `logic.ts` exceeds ~500 lines, mixes domain prefixes, or contains function groups whose type dependencies do not intersect
+- ⚠️ Warning — `shared/` imports from a domain folder
+- ⚠️ Warning — A file in `shared/` is too large
+- ⚠️ Warning — The App layer is too large
+- ⚠️ Warning — `app/store.ts` exists (the App layer must not own DB access)
+- ⚠️ Warning — The App layer contains logic (`app/logic.ts` or business judgment)
+- ⚠️ Warning — `app/route.ts` defines routes (move them to `domainXxx/routes.ts`)
+- ⚠️ Warning — `app/route.ts` is too large
+- ⚠️ Warning — A route references a workflow file that does not exist (dead route candidate)
+- ⚠️ Warning — A route past its `sunset` date still exists
+- 💡 Hint — API routes are defined outside an `/api` group
+- 💡 Hint — `workflow.ts` exceeds ~300 lines or ~10 functions
+- 💡 Hint — A workflow calls a parse function (parsing belongs in route)
+- 💡 Hint — `parse.ts` exceeds ~300 lines or ~10 functions (shared schemas are allowed)
+- 💡 Hint — `logic.ts` exceeds ~300 lines or ~10 functions (consider splitting into `logic/`)
+- 💡 Hint — `slime.config.ts` is missing (it maps domain error codes to HTTP status codes)
+- 💡 Hint — A workflow is not referenced by any route (unreachable workflow candidate)
+- 💡 Hint — A domain folder has no `routes.ts`
+<!-- END GENERATED -->
 
 ---
 
