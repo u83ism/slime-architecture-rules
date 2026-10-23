@@ -74,7 +74,7 @@ FOLDER_NAMES.QUERY           // "query"
 import { FOLDER_PATTERNS } from "@u83ism/architecture-rules"
 
 FOLDER_PATTERNS.DOMAIN       // /^domain[A-Z]/  （例: domainUser, domainOrder）
-FOLDER_PATTERNS.CROSS_PREFIX // "cross-"         （例: cross-auth, cross-mail）
+FOLDER_PATTERNS.ORCHESTRATE_PREFIX // "orchestrate-" （例: orchestrate-order-inventory）
 ```
 
 ### `Severity`

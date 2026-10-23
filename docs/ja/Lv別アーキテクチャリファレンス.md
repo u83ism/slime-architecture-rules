@@ -61,10 +61,14 @@ src/
 | ファイル | やること | やらないこと |
 |---|---|---|
 | `route.ts` | ルート定義・Middleware付与・Workflow指定 | ビジネスロジック・DB・レスポンス生成 |
-| `middleware.ts` | 認証・認可・レートリミット・CORS・ロギング | ビジネスロジック・DBクエリ |
+| `middleware.ts` | HTTPの関門：HTTP固有の関心事（CORS・レートリミット・署名検証・ロギング等）、資格情報からプリンシパルへの変換、ロール単位の粗い認可 | 業務判断、リソース単位の認可 |
 | `workflow.ts` | 1リクエストのend-to-endオーケストレーション | Middlewareの責務（認証等） |
 
 - Middlewareはルートごとに**明示的に付与**する（フォルダ規約による自動適用禁止）
+- Middlewareは「HTTPの関門」。認証とは、Cookie・Bearerトークン等の資格情報を**プリンシパル**（誰の権限で実行されているかを表す値。ユーザー・外部サービス・システム・匿名のいずれか）に変換する仕事である
+- 関門の判定に必要な読み取り（セッション照会等）は行ってよい。業務判断はしない
+- 「この投稿を編集できるのは作成者だけ」のような**リソース単位の認可**は、リソースを読むまで判定できないためMiddlewareでは行わない（Lv5以降はLogicの仕事）
+- HTTPの関門でしか使わない関心事（CORS・IP制限等）はMiddlewareだけで完結させる。Middleware以外のコードも必要とする関心事（認証の照会処理等）は、Lv6以降は上流domainとして置き、Middlewareはそれを呼ぶ
 - `/health` 等のインフラ用ルートは `/api/` グループの外に置く
 
 ```ts
@@ -110,7 +114,7 @@ src/
 | ファイル | やること | やらないこと |
 |---|---|---|
 | `route.ts` | ルート定義・Middleware付与・Workflow指定 | ビジネスロジック・DB・レスポンス生成 |
-| `middleware.ts` | 認証・認可・レートリミット・CORS | ビジネスロジック・DBクエリ |
+| `middleware.ts` | HTTPの関門（Lv2参照） | 業務判断、リソース単位の認可 |
 | `workflow.ts` | parse呼び出し → 処理 → レスポンス | バリデーションロジック |
 | `parse.ts` | `unknown` → 型付き値への変換。失敗時はthrow（FWが400にマップ） | DBアクセス・外部API呼び出し |
 
@@ -170,7 +174,7 @@ src/
 | ファイル | やること | やらないこと |
 |---|---|---|
 | `route.ts` | ルート定義のみ | ビジネスロジック・DB |
-| `middleware.ts` | 横断的関心事 | ビジネスロジック・DBクエリ |
+| `middleware.ts` | HTTPの関門（Lv2参照）。関門の判定に必要なstore/client呼び出しは可 | 業務判断、リソース単位の認可 |
 | `workflow.ts` | parse → store/client → レスポンス、`withTransaction()` でトランザクション管理 | ORM直接import、業務判断 |
 | `parse.ts` | 型変換のみ | DBアクセス・外部API |
 | `store.ts` | DBの読み書きのみ、ドメイン型で返す | ORMオブジェクトを返す、業務ロジック |
@@ -288,6 +292,16 @@ const exists = await findUserByEmail(email)  // WorkflowがStoreを呼ぶ
 const check = userCanCreate(!!exists)        // LogicはBooleanだけ受け取る
 ```
 
+#### リソース単位の認可はLogicで行う
+
+「この投稿を編集できるのは作成者だけ」のような認可は、Workflowがリソースを読み込んでから、プリンシパルと一緒にLogicへ渡して判定する（Middlewareではリソースを読む前なので判定できない）。
+
+```ts
+const post = await findPostById(input.postId)   // Workflowがリソースを解決
+const check = postCanEdit(principal, post)      // Logicが判定
+if (!check.ok) throw new Error(check.error)
+```
+
 #### slime.config.ts でDomainErrorをHTTPコードにマッピング
 
 ```ts
@@ -347,6 +361,10 @@ src/
   client/
     client.ts         # 外部APIアクセス
     adapter.ts        # 腐敗防止層（外部語彙↔ドメイン語彙の変換）
+  domainAuth/         # 上流domain：多くのdomainが使う認証（どのdomainにも依存しない）
+    workflow.ts
+    logic.ts
+    store.ts
   domainUser/
     routes.ts         # userドメインのルート定義
     workflow.ts       # App層からパース済み入力を受け取る
@@ -367,8 +385,29 @@ src/
 |---|---|
 | 命名 | `domain[A-Z]camelCase`（例: `domainUser`, `domainOrder`） |
 | 自己完結 | 各domainはroutes / workflow / logic / storeを持つ |
-| 相互参照禁止 | domain間の直接importは禁止 |
-| App層のみ複数domain参照可 | App層だけが複数domainをimportできる |
+| 依存はDAGで宣言 | domain間のimportは、設定ファイルで宣言した依存の向きに限り可。宣言外の向きと循環は禁止 |
+| App層は全domain参照可 | App層は宣言に関係なく全domainをimportできる（ルートの集約とオーケストレーションのため） |
+
+#### ドメイン間の依存宣言
+
+> **DAG（Directed Acyclic Graph・有向非巡回グラフ）**：向きのある矢印でつながった点の集まりのうち、矢印をたどっても出発点に戻ってこないもの。ここでは点がdomain、矢印が依存を表す。循環がなければdomainを上流から一列に並べられるため、上流から順にビルド・テスト・理解できる。npmのパッケージ依存やExcelのセル参照（循環参照がエラーになる）も同じ構造。
+
+```ts
+// slime.config.ts
+export default {
+  domains: {
+    domainAuth: [],                            // 最上流：どのdomainにも依存しない
+    domainUser: ['domainAuth'],
+    domainOrder: ['domainAuth', 'domainUser'],
+  },
+}
+```
+
+- 宣言は、DDDのコンテキストマップにおける上流・下流の関係をコードに落としたもの。根拠は非循環依存の原則（循環さえしなければモジュール間の依存は許容できる）
+- 入れ子のdomainも、上位から下位への依存として宣言すればよい
+- 認証・テナントのように多くのdomainが使う業務能力は、専用のフォルダ種別を作らず**最上流のdomain**として宣言する
+- 認証のMiddleware自体は`app/middleware.ts`に置き、そこから上流domainを呼ぶ（domainフォルダにMiddlewareを置くと、そのMiddlewareを使う側との依存が逆転しやすい）
+- 設定値は、そのキーを使うルールを持つdomainに置く（設定テーブルが1つにまとまっているのは保存の都合であり、domain境界ではない）
 
 #### app/ の役割
 
@@ -413,7 +452,8 @@ export const userRoutes = (r: Router) => {
 
 ### Kaachanが検査する項目
 
-- domain間の直接import → ❌ Error
+- 依存宣言にないdomain間のimport → ❌ Error
+- 依存宣言に循環がある → ❌ Error
 - `app/route.ts` にルート定義がある（集約のみのはず） → ⚠️ Warning
 - `store.ts` 命名規則違反 → ❌ Error（Lv4の💡 HintからLv6でError化）
 - `store.ts` がORM型を戻り値に使っている → ❌ Error
@@ -427,10 +467,11 @@ export const userRoutes = (r: Router) => {
 - `domainXxx/routes.ts`：URLパターン・Middleware・Workflowの対応をdomainに同居
 - `client/adapter.ts`：腐敗防止層の明示化
 - store命名規則違反がErrorに昇格（Lv4の推奨 → Lv6の強制）
+- ドメイン間の依存をDAGとして宣言（多くのdomainが使う能力は最上流のdomainとして扱う）
 
 ---
 
-## Lv7 — cross-フォルダ
+## Lv7 — orchestrate-フォルダ
 
 ### ディレクトリ構造
 
@@ -460,23 +501,24 @@ src/
     logic.ts
     logic.test.ts
     store.ts
-  cross-auth/           # 複数domainにまたがる関心事（認証等）
-    logic.ts
-    store.ts
-  cross-notification/   # 通知配信等
-    logic.ts
+  orchestrate-order-inventory/  # 複数domainをまたぐ調整役（App層から切り出したもの）
+    workflow.ts
 ```
 
 ### レイヤールール
 
-#### cross-フォルダの原則
+#### orchestrate-フォルダの原則
+
+orchestrate-は、App層に集中する「複数domainをまたぐ調整」を切り出す場所。domainの**上**に立つ。
 
 | 原則 | 内容 |
 |---|---|
-| 命名 | `cross-[kebab-case]`（例: `cross-auth`, `cross-notification`） |
-| 作るとき | 2つ以上のdomainが同じロジック・store・clientを必要とするとき |
-| 作らないとき | 1つのdomainだけが使う（そのdomainに置く）、純粋ユーティリティ（shared/に置く） |
-| import方向 | domain → cross- ✅、cross- → domain ❌、cross- → cross- ❌、cross- → app ❌ |
+| 命名 | `orchestrate-[kebab-case]`（例: `orchestrate-order-inventory`） |
+| 作るとき | 複数domainをまたぐ調整がApp層を肥大化させているとき。特に複数domainの更新を原子的に行う必要があるとき |
+| 作らないとき | 多くのdomainが使う業務能力（認証・テナント等）。それは最上流のdomainとして扱う（Lv6参照） |
+| import方向 | orchestrate- → domain ✅、orchestrate- → shared ✅、domain → orchestrate- ❌、orchestrate- → orchestrate- ❌、orchestrate- → app ❌ |
+
+> **cross-からの改名**：旧版では`cross-`の名前に「domainの上に立つ調整役」と「domainの下に敷く土台（cross-auth等）」の2つの意味が混在しており、文書によって依存の向きが逆になっていた。土台はLv6の最上流domainに吸収し、調整役を`orchestrate-`として残した。
 
 #### defer() — post-commitフック（Lv7で導入）
 
@@ -501,22 +543,22 @@ return withTransaction(async () => {
 
 App層が持ってはいけないもの: `logic.ts` / `store.ts` / `client/`の直接呼び出し
 
-#### ドメイン階層制約（Lv7で追加）
+#### ドメイン階層制約
 
-ドメインが入れ子になる場合：上位→下位ドメインの参照のみ可。下位ドメイン同士の参照禁止。
+Lv6のドメイン間依存宣言（DAG）に吸収された。入れ子のdomainも、上位から下位への依存として宣言する。
 
 ### Kaachanが検査する項目
 
-- `logic.test.ts` が存在しない（domain・cross-問わず） → ❌ Error（Lv5〜6の💡 HintからLv7でError化）
-- cross- フォルダがdomainをimportしている → ❌ Error
-- cross- フォルダ同士がimportし合っている → ❌ Error
-- cross- フォルダがapp/をimportしている → ❌ Error
+- `logic.test.ts` が存在しない → ❌ Error（Lv5〜6の💡 HintからLv7でError化）
+- domainがorchestrate-フォルダをimportしている → ❌ Error
+- orchestrate- フォルダ同士がimportし合っている → ❌ Error
+- orchestrate- フォルダがapp/をimportしている → ❌ Error
 - App層がlogic.ts / store.ts / client/を直接持つ → ❌ Error
 - Lv6のすべての検査が継続
 
 ### 🆕 Lv7で追加されたこと
 
-- `cross-フォルダ`：複数domainにまたがる関心事の構造化
+- `orchestrate-フォルダ`：App層から複数domainをまたぐ調整を切り出す
 - `defer()`：post-commitフックによる副作用の外出し
 - `logic.test.ts` 必須：テストなしがErrorに昇格
 
@@ -553,7 +595,7 @@ src/
     logic.ts
     logic.test.ts
     store.ts
-  cross-*/          # ← Lv8でトランザクション専用に特化
+  orchestrate-*/    # ← Lv8でトランザクション専用に特化
 ```
 
 ### レイヤールール
@@ -564,7 +606,7 @@ src/
 - イベントは**過去に起きたことを表す**型：`type` フィールドに大文字スネークケースの定数文字列を使う
 - `payload` フィールドでイベントデータを持つ
 - クラスインスタンス禁止（純粋なデータ型のみ）
-- `shared/events.ts` はdomain / cross- を一切importしない
+- `shared/events.ts` はdomain / orchestrate- を一切importしない
 
 ```ts
 // shared/events.ts
@@ -606,17 +648,17 @@ export const CreateUserWorkflow = async (req, res) => {
 
 イベントバスではなく戻り値方式を選ぶ理由：**イベントのルーティングが `app/workflow.ts` を読めば全部わかる**（emit/onは誰がリスナーかコードを追わないと分からない。バックエンドのドメインイベントは「処理されなかった場合はバグ」なので可視性が重要）。
 
-#### cross-フォルダのLv8特化
+#### orchestrate-フォルダのLv8特化
 
-Lv8からcross-はトランザクション専用に特化する。
+Lv8からorchestrate-はトランザクション専用に特化する。
 
 | 処理の性質 | 置き場 |
 |---|---|
 | 失敗してもロールバック不要な副作用（メール・通知・分析） | ドメインイベント + `defer()` |
-| 原子性が必要な複数domain操作（在庫減算と注文作成を同時に） | `cross-` + `withTransaction()` |
+| 原子性が必要な複数domain操作（在庫減算と注文作成を同時に） | `orchestrate-` + `withTransaction()` |
 
 ```ts
-// cross-orderInventory/workflow.ts — トランザクション専用
+// orchestrate-order-inventory/workflow.ts — トランザクション専用
 export const createOrderWithInventory = (input: ValidatedInput) =>
   withTransaction(async () => {
     const event = await orderDomain.createOrder(input)
@@ -628,16 +670,16 @@ export const createOrderWithInventory = (input: ValidatedInput) =>
 ### Kaachanが検査する項目
 
 - `shared/events.ts` が存在しない → ⚠️ Warning
-- `shared/events.ts` がdomainやcross-をimportしている → ❌ Error
+- `shared/events.ts` がdomainやorchestrate-をimportしている → ❌ Error
 - イベント型の `type` フィールドが大文字スネークケースでない → ⚠️ Warning
-- `cross-` フォルダに `withTransaction()` がない → ⚠️ Warning（「ドメインイベントで代替できるはず」）
+- `orchestrate-` フォルダに `withTransaction()` がない → ⚠️ Warning（「ドメインイベントで代替できるはず」）
 - Lv7のすべての検査が継続
 
 ### 🆕 Lv8で追加されたこと
 
 - `shared/events.ts`：全domainイベント型定義の集中管理
 - ドメインイベントの戻り値方式（イベントバスを使わない）
-- cross-フォルダのトランザクション専用化
+- orchestrate-フォルダのトランザクション専用化
 
 ---
 
@@ -676,7 +718,7 @@ src/
     ports.ts
     logic.ts
     logic.test.ts
-  cross-auth/
+  domainAuth/                 # 上流domain（Lv6参照）
     logic.ts
     ports.ts
 ```
@@ -818,7 +860,7 @@ src/
       workflow.ts
       ports.ts
     routes.ts
-  cross-auth/
+  domainAuth/                 # 上流domain（Lv6参照）
     logic.ts
     ports.ts
 ```
@@ -910,8 +952,8 @@ export const userQueryAdapter: UserReadPort = {
 | 4 | + `store.ts` `client.ts` | レイヤードアーキテクチャ・ORM隠蔽・腐敗防止層 |
 | 5 | + `logic.ts` | Functional Core（Result型・純粋関数・ドメインprefix） |
 | 6 | `app/` `shared/` `client/` `domainXxx/` | ドメイン分割・store命名がError化 |
-| 7 | + `cross-*/` + `logic.test.ts` + `defer()` | クロスドメイン構造化・テスト義務化・post-commitフック |
-| 8 | + `shared/events.ts` | ドメインイベント（戻り値方式）・cross-のトランザクション専用化 |
+| 7 | + `orchestrate-*/` + `logic.test.ts` + `defer()` | ドメイン横断の調整を構造化・テスト義務化・post-commitフック |
+| 8 | + `shared/events.ts` | ドメインイベント（戻り値方式）・orchestrate-のトランザクション専用化 |
 | 9 | + `ports.ts` + `infrastructure/` | Ports & Adapters・store.ts消滅・関数型DI |
 | 10 | `command/` `query/` | CQRS・読み書きの構造的分離 |
 
@@ -925,6 +967,6 @@ export const userQueryAdapter: UserReadPort = {
 | logic.ts肥大化（500行/prefix混在） | — | ⚠️ Warning | ⚠️ Warning | ⚠️ Warning | ⚠️ Warning |
 | workflow→ORM直接import | ❌ Error | ❌ Error | ❌ Error | ❌ Error | ❌ Error |
 | logic→store/clientのimport | — | ❌ Error | ❌ Error | ❌ Error | ❌ Error |
-| domain間の直接import | — | — | ❌ Error | ❌ Error | ❌ Error |
-| cross-→domainのimport | — | — | — | ❌ Error | ❌ Error |
+| 依存宣言にないdomain間import | — | — | ❌ Error | ❌ Error | ❌ Error |
+| domainからorchestrate-へのimport | — | — | — | ❌ Error | ❌ Error |
 | store.tsが残存（Lv9以降） | — | — | — | — | ❌ Error |

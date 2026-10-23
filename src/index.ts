@@ -1,4 +1,5 @@
 export type { Severity } from "./severity.js"
+export type { DomainDependencies } from "./dependencies.js"
 
 export {
   LAYER_FILES,

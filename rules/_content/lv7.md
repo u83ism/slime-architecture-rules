@@ -1,7 +1,7 @@
-# Slime Architecture Rules — Level 7 (Cross Folders)
+# Slime Architecture Rules — Level 7 (Orchestrate Folders)
 
 This project uses **Slime Architecture**, a progressive layered architecture for TypeScript/Node.js backends.
-The current level is **Lv7**: cross-domain concerns are isolated in `cross-<name>/` folders, logic tests are mandatory, and post-commit side effects use `defer()`.
+The current level is **Lv7**: multi-domain coordination is moved out of the App layer into `orchestrate-<name>/` folders, logic tests are mandatory, and post-commit side effects use `defer()`.
 
 ---
 
@@ -33,51 +33,55 @@ src/
     logic.ts
     logic.test.ts
     store.ts
-  cross-auth/         # Cross-domain concern: spans multiple domains, owned by none
+  domainAuth/         # Upstream domain (see Lv6): depends on no other domain
+    workflow.ts
     logic.ts
+    logic.test.ts
     store.ts
-  cross-notification/ # Cross-domain concern: notification dispatch
-    logic.ts
+  orchestrate-order-inventory/  # Multi-domain coordination taken out of the App layer
+    workflow.ts
 ```
 
 ---
 
-## Cross Folder Rules (new at Lv7)
+## Orchestrate Folder Rules (new at Lv7)
 
-- Cross folders are named with the `cross-` prefix in kebab-case: `cross-auth`, `cross-notification`, `cross-billing`.
-- A `cross-` folder encapsulates a concern that is **needed by multiple domains** but belongs to none of them.
-- Domains **may import from** `cross-` folders. `cross-` folders must not import from domain folders.
-- `cross-` folders must not import from each other.
-- `cross-` folders must not import from `app/` (App layer reference is forbidden).
-- `cross-` folders follow the same internal layer rules as domain folders (pure logic, named store functions, etc.).
+- Orchestrate folders are named with the `orchestrate-` prefix in kebab-case: `orchestrate-order-inventory`, `orchestrate-user-onboarding`.
+- An `orchestrate-` folder holds **coordination across multiple domains** that would otherwise bloat `app/workflow.ts`. It sits **above** domains.
+- `orchestrate-` folders may import from domain folders and `shared/`.
+- Domain folders must not import from `orchestrate-` folders.
+- `orchestrate-` folders must not import from each other.
+- `orchestrate-` folders must not import from `app/` (App layer reference is forbidden).
 
 ```
 Allowed import directions:
-  domainXxx  →  cross-yyy   ✅
-  cross-yyy  →  shared      ✅
-  cross-yyy  →  domainXxx   ❌
-  cross-yyy  →  cross-zzz   ❌
-  cross-yyy  →  app/        ❌
+  orchestrate-yyy  →  domainXxx        ✅
+  orchestrate-yyy  →  shared           ✅
+  domainXxx        →  orchestrate-yyy  ❌
+  orchestrate-yyy  →  orchestrate-zzz  ❌
+  orchestrate-yyy  →  app/             ❌
 ```
 
-### When to create a cross- folder
+### When to create an orchestrate- folder
 
-Create a `cross-` folder when:
-- Two or more domain folders need the same logic/store/client.
-- The concern does not "belong" to any single domain (e.g., auth spans all domains, notifications are triggered by many domains).
+Create an `orchestrate-` folder when:
+- Multi-domain coordination is making `app/workflow.ts` large.
+- Especially when several domains must be updated atomically.
 
-Do **not** create a `cross-` folder for:
+Do **not** create an `orchestrate-` folder for:
+- Capabilities used by many domains (identity/auth, tenant). Those are upstream domains (see Lv6).
 - Concerns used by only one domain (keep it in that domain folder).
 - Pure utilities or type definitions (those belong in `shared/`).
 
 ```ts
-// OK — domain importing from cross folder
-// domainOrder/workflow.ts
-import { verifyPermission } from '../cross-auth/logic'
+// OK — orchestrate folder coordinating domains
+// orchestrate-order-inventory/workflow.ts
+import { createOrder } from '../domainOrder/workflow'
+import { deductStock } from '../domainInventory/workflow'
 
-// NG — cross folder importing from domain
-// cross-notification/logic.ts
-import { findOrderById } from '../domainOrder/store'  // not allowed
+// NG — domain importing from an orchestrate folder
+// domainOrder/workflow.ts
+import { createOrderWithInventory } from '../orchestrate-order-inventory/workflow'  // not allowed
 ```
 
 ---
@@ -122,13 +126,12 @@ export const UpdateProfileWorkflow = async (input: ValidatedInput) => {
 ## Domain Folder Rules (unchanged from Lv6, with stricter logic test requirement)
 
 - Domain folders are named `domain[A-Z]camelCase`: `domainUser`, `domainOrder`.
-- Each domain is self-contained and must not import from other domain folders.
-- Domains may import from `cross-` folders.
-- Domain nesting: upper-level domains may reference lower-level domains, but lower-level domains must not reference each other (avoid circular domain dependencies).
+- Inter-domain imports follow the declared dependency DAG (see Lv6). Nested domains are expressed as declared dependencies too.
+- Domains must not import from `orchestrate-` folders.
 
 ### Layer rules within each domain
 - `workflow.ts`: orchestrates — calls parse/store/logic — never imports ORM directly.
-- `logic.ts`: pure functions with domain-prefixed names, `Result` for fallible operations.
+- `logic.ts`: pure functions with domain-prefixed names, `Result` for fallible operations. Decides resource-level authorization from the principal and the loaded resource.
 - `logic.test.ts`: **mandatory** — missing test file is a ❌ Error at Lv7.
 - `store.ts`: `find*` / `list*` / `get*` / `count*` / `search*` / `create*` / `save*` / `update*` / `delete*` / `remove*` naming; no ORM types in return values.
 
@@ -137,7 +140,7 @@ export const UpdateProfileWorkflow = async (input: ValidatedInput) => {
 ## app/ Rules (unchanged from Lv6)
 
 - `app/route.ts` aggregates domain routes only — no inline route definitions.
-- `app/middleware.ts` defines application-wide middleware.
+- `app/middleware.ts` is the HTTP gate (see Lv6). Credential checks call the upstream domain (e.g., `domainAuth`).
 - **App layer must not contain** `logic.ts`, `store.ts`, or direct `client/` calls — App is an orchestration-only layer.
 
 ---
@@ -184,10 +187,11 @@ export default {
 
 ## What Kaachan Checks at Lv7
 
-- Cross folders follow `cross-[a-z]` naming (kebab-case with `cross-` prefix).
-- No imports from domain folders into `cross-` folders (reverse direction is forbidden).
-- No cross-to-cross imports.
-- **`logic.test.ts` missing in any domain or `cross-` folder → ❌ Error** (upgraded from 💡 Hint at Lv6).
+- Orchestrate folders follow `orchestrate-[a-z]` naming (kebab-case with `orchestrate-` prefix).
+- Domain folders do not import from `orchestrate-` folders.
+- No orchestrate-to-orchestrate imports.
+- `orchestrate-` folders do not import from `app/`.
+- **`logic.test.ts` missing in any domain folder → ❌ Error** (upgraded from 💡 Hint at Lv6).
 - App layer does not contain `logic.ts`, `store.ts`, or direct `client/` imports.
 - All Lv6 checks continue to apply.
 
@@ -195,12 +199,16 @@ export default {
 
 ## Guidance for AI Assistants
 
-When a concern appears in multiple domain folders:
-1. Identify whether it is truly cross-domain or just coincidentally similar code.
-2. If it is genuinely shared logic (same business rule, same external service), propose extracting it into a `cross-<name>/` folder.
-3. Confirm the name and scope with the user before creating the folder.
-4. After extraction, update all domain imports to reference the new `cross-` folder.
-5. Verify that the `cross-` folder does not import from any domain folder.
+When a capability is needed by multiple domain folders (e.g., identity, tenant):
+1. Identify whether it is truly a shared capability or just coincidentally similar code.
+2. If it is a shared capability, propose extracting it into an upstream domain folder (e.g., `domainAuth/`) and declaring it as a dependency of the domains that use it.
+3. Confirm the name, scope, and the updated dependency declaration with the user before creating the folder.
+4. Keep HTTP-gate code in `app/middleware.ts`; the middleware calls the upstream domain.
+
+When `app/workflow.ts` grows with multi-domain coordination:
+1. Propose moving the coordination into an `orchestrate-<name>/` folder.
+2. Confirm the name and scope with the user before creating the folder.
+3. Verify that no domain imports from the new `orchestrate-` folder.
 
 When adding side effects (email, notifications, analytics) to a workflow:
 - Use `defer()` to move them outside the transaction lock window.
@@ -212,6 +220,6 @@ When adding side effects (email, notifications, analytics) to a workflow:
 
 To advance to Lv8, introduce:
 - `shared/events.ts` — domain event type definitions shared across domains
-- Specialize `cross-` folders for transactional operations; use domain events for non-transactional side effects
+- Specialize `orchestrate-` folders for transactional operations; use domain events for non-transactional side effects
 
 Run `slime level:next` to check what is needed.

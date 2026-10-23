@@ -33,8 +33,8 @@ export type FolderName = (typeof FOLDER_NAMES)[keyof typeof FOLDER_NAMES]
 export const FOLDER_PATTERNS = {
   /** ドメインフォルダ: domainXxx 形式（例: domainUser） */
   DOMAIN: /^domain[A-Z]/,
-  /** クロスフォルダ: cross- プレフィックス（例: cross-auth） */
-  CROSS_PREFIX: "cross-",
+  /** 調整役フォルダ: orchestrate- プレフィックス（例: orchestrate-order-inventory） */
+  ORCHESTRATE_PREFIX: "orchestrate-",
 } as const
 
 /** shared/events.ts のパス断片 */

@@ -21,6 +21,10 @@ src/
   client/
     client.ts       # External API calls
     adapter.ts      # Anti-corruption layer: maps external vocabulary to domain vocabulary
+  domainAuth/       # Upstream domain: identity used by many domains (depends on no other domain)
+    workflow.ts
+    logic.ts
+    store.ts
   domainUser/       # One folder per business domain
     routes.ts       # Route definitions for this domain
     workflow.ts     # Domain workflow (receives already-parsed input from app layer)
@@ -39,13 +43,28 @@ src/
 
 - Domain folders are named with the `domain` prefix in camelCase: `domainUser`, `domainOrder`, `domainPayment`.
 - Each domain folder is **self-contained**: it owns its workflow, logic, store, and routes.
-- **Domains must not import from each other directly.** Inter-domain communication goes through `shared/` or events (introduced at Lv8).
-- `app/` is the only layer allowed to import from multiple domains (to aggregate routes and orchestrate).
+- **Inter-domain imports must follow the declared dependency DAG.** Declare in `slime.config.ts` which domains each domain may depend on. Undeclared directions and cycles are forbidden. Nested domains are expressed as declared dependencies too.
+- `app/` may import from any domain regardless of the declaration (to aggregate routes and orchestrate).
+- Capabilities used by many domains (identity/auth, tenant) are **upstream domains**: ordinary domain folders that depend on no other domain. Do not create a special folder kind for them.
+- Settings belong to the domain whose rules use them. A single settings table is a storage detail, not a domain boundary.
 
 ```ts
-// NG — domain importing from another domain
+// slime.config.ts — declared dependency DAG
+export default {
+  domains: {
+    domainAuth: [],                            // upstream: depends on no other domain
+    domainUser: ['domainAuth'],
+    domainOrder: ['domainAuth', 'domainUser'],
+  },
+}
+
+// OK — declared direction
 // domainOrder/workflow.ts
-import { findUserById } from '../domainUser/store'  // not allowed
+import { findUserById } from '../domainUser/store'
+
+// NG — undeclared direction (domainUser does not declare domainOrder)
+// domainUser/workflow.ts
+import { findOrderById } from '../domainOrder/store'  // not allowed
 ```
 
 ### app/route.ts
@@ -67,6 +86,11 @@ export const routes = [userRoutes, orderRoutes]
 ### app/parse.ts
 - Handles app-level request parsing. Domain workflows receive already-parsed, typed input.
 - Must not access DB or external APIs — pure transformation only.
+
+### app/middleware.ts
+- The HTTP gate for the whole application (see Lv2–Lv5 rules): HTTP-specific concerns, converting credentials into a principal, and coarse role-based authorization.
+- Credential checks call the upstream domain (e.g., `domainAuth`). Do not place middleware inside domain folders — it inverts dependencies between the domain that owns the middleware and the domains that use it.
+- Must not perform resource-level authorization (that belongs in domain `logic.ts`).
 
 ### domainXxx/routes.ts
 - Registers URL patterns, middleware, and workflow handlers for this domain.
@@ -90,6 +114,7 @@ export const userRoutes = (r: Router) => {
 ### domainXxx/logic.ts
 - Pure functions only: no DB access, no external API calls, no side effects.
 - Must have domain-prefixed names (`userCan*`, `orderCan*`, `calcOrder*`, etc.).
+- Decides resource-level authorization from the principal and the loaded resource (e.g., `postCanEdit(principal, post)`).
 - Fallible functions return `Result` type — no `throw`.
 - **Must be tested** (`logic.test.ts`). Missing tests are a 💡 Hint at Lv6.
 
@@ -163,7 +188,8 @@ export default {
 ## What Kaachan Checks at Lv6
 
 - Domain folders follow `domain[A-Z]` naming (camelCase with `domain` prefix).
-- No direct imports between domain folders.
+- Inter-domain imports follow the declared dependency DAG — undeclared directions are ❌ Error.
+- The dependency declaration contains no cycles — ❌ Error if it does.
 - `app/route.ts` does not contain inline route definitions (aggregation only) — ⚠️ Warning if violated.
 - `app/workflow.ts` does not contain `logic.ts`, `store.ts`, or `client/` code (not allowed in App layer).
 - `store.ts` function naming violations are now **❌ Error** (upgraded from 💡 Hint at Lv5).
@@ -176,9 +202,9 @@ export default {
 
 When adding a new feature that spans multiple domains:
 1. Identify which domain owns the primary responsibility.
-2. If data from another domain is needed, have the app-layer workflow resolve it and pass it as a parameter to the domain workflow.
-3. If cross-domain coordination is complex, suggest preparing for Lv7 (`cross-` folders).
-4. Never add direct imports between domain folders — propose the correct pattern instead.
+2. If data from another domain is needed and that dependency is declared, import it directly. Otherwise, have the app-layer workflow resolve it and pass it as a parameter to the domain workflow.
+3. If multi-domain coordination is complex, suggest preparing for Lv7 (`orchestrate-` folders).
+4. Never add an import between domains that is not in the dependency declaration. If a new direction is needed, propose updating the declaration to the user and confirm it creates no cycle.
 
 When `app/route.ts` or `shared/store.ts` is growing large:
 - `app/route.ts` growing = signal that domain `routes.ts` files are not being used properly.
@@ -189,7 +215,7 @@ When `app/route.ts` or `shared/store.ts` is growing large:
 ## Next Step: Lv7
 
 To advance to Lv7, introduce:
-- `cross-<name>/` folders for concerns that span multiple domains (e.g., `cross-auth/`, `cross-notification/`)
+- `orchestrate-<name>/` folders that take multi-domain coordination out of the App layer (e.g., `orchestrate-order-inventory/`)
 - `defer()` for post-commit side effects
 - Make logic tests mandatory (Error if missing)
 

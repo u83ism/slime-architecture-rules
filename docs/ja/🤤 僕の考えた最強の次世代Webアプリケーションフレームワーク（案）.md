@@ -12,7 +12,7 @@ TS製。既存の設計論と関数型プログラミングを参考に再設計
         - DBアクセス層（Store）と外部APIアクセス層（Client）はLv4で同時に導入する
 - **コードがFatになってきたら検知**し、hint/warning/errorの3段階でがんがん指摘する。**自動でリファクタリング（過激すぎるのでオプション）は将来構想**
     - Fat Logic対策として、関数のドメインprefix混在検出に加え、**ts-morphによるAST解析で型依存グラフを構築し、互いに型依存が交差しない関数群を異なるドメイン候補として自動検出する**機能を持つ。静的解析でできる限界まで踏み込む姿勢がKaachanらしさ。
-    - Lv6以降は**ドメイン間・層間の依存方向を静的検査**する（`dependency-cruiser`相当）。「domainAがdomainBをimportしている（相互参照違反）」「WorkflowがORMを直接importしている」等の依存ルール違反をimportグラフ解析で自動検出。ルールはアーキテクチャレベルに連動して自動設定される。
+    - Lv6以降は**ドメイン間・層間の依存方向を静的検査**する（`dependency-cruiser`相当）。「domainAが依存宣言にないdomainBをimportしている」「WorkflowがORMを直接importしている」等の依存ルール違反をimportグラフ解析で自動検出。ルールはアーキテクチャレベルに連動して自動設定される。
     - opinionatedにがんがん指摘する挙動こそが「母ちゃん」たる所以
 - **ドメイン分割は流石に静的なプログラムによる解析が厳しいので肥大化だけ指摘**。以下4点の理由による。
     - 既存のコーディングAIが比較的得意とする領域で重複してしまい静的プログラミングで対抗するのは負けがみえている
@@ -260,7 +260,7 @@ Slimeが自動カバーする範囲：Parse失敗→400 / Middleware拒否→401
 
 #### Slimeが提供するもの
 - 依存方向の静的検査（`dependency-cruiser`相当）がKaachanに組み込まれる。Lv6以降、アーキテクチャレベルに連動して検査対象が自動増加する
-  - 「domainAがdomainBをimportしている（相互参照違反）」
+  - 「domainAが依存宣言にないdomainBをimportしている」
   - 「WorkflowがORMを直接importしている」等の依存ルール違反をimportグラフ解析で自動検出
 
 #### Kaachanのお叱りポイント
@@ -277,13 +277,13 @@ Slimeが自動カバーする範囲：Parse失敗→400 / Middleware拒否→401
 - Shared
   - `utility.ts` / `smallLogic.ts` 内の副作用を持つ処理に対して ❌ Error
   - 各ファイル肥大化に対して ⚠️ Warning
-  - domainフォルダのファイルをimportしたら ⚠️ Warning（それはcross-domainの仕事）
+  - domainフォルダのファイルをimportしたら ⚠️ Warning
 - client
   - client.tsを直接呼び出したら ❌ Error（adapter.ts経由のみ）
 - store
   - 関数名が命名規則に従っていない場合は ❌ Error（Lv4でhintだったものがエラー化）
   - query系関数内でcommandが検出されたら ❌ Error（逆も同様）
-- domain間の相互参照は ❌ Error
+- 依存宣言にないdomain間の参照は ❌ Error。依存宣言の循環も ❌ Error
 
 ---
 
@@ -313,10 +313,10 @@ return slime.withTransaction(async () => {
 - Shared
   - 肥大化に対して ❌ Error
 - domain
-  - 下位ドメインから上位ドメインへの参照を ❌ Error
-  - 下位ドメイン同士の参照を ❌ Error
-- cross-domain
+  - `orchestrate-`フォルダへの参照を ❌ Error
+- orchestrate-
   - Appへの参照に対して ❌ Error
+  - `orchestrate-`同士の参照に対して ❌ Error
 - Logic
   - logic.tsに対応するlogic.test.tsが存在しない場合は ❌ Error（Lv5ではWarning、Lv7でErrorに昇格）
 - Workflow（`slime.withTransaction()` 内）
@@ -330,7 +330,7 @@ return slime.withTransaction(async () => {
 - shared/events.ts
   - Eventがクラスインスタンスだったら ❌ Error（オブジェクト型のみ）
   - `type` フィールド（discriminated union）がなかったら ⚠️ Warning
-- cross-フォルダ
+- orchestrate-フォルダ
   - `slime.withTransaction()` を伴わない処理のみで構成されている場合は ⚠️ Warning（「これはドメインイベントで書けるはず」）
   - メール送信・外部API呼び出し等の非トランザクション処理が含まれたら ⚠️ Warning
 
@@ -362,8 +362,8 @@ return slime.withTransaction(async () => {
 
 | Lv | 追加される検査 |
 |---|---|
-| 6 | domain間相互参照禁止・App以外からdomain参照禁止 |
-| 7 | cross-→App参照禁止・ドメイン上位→下位方向のみ |
+| 6 | 依存宣言にないdomain間参照の禁止・依存宣言の循環禁止 |
+| 7 | orchestrate-からApp、domainからorchestrate-への参照禁止 |
 | 9 | domain→infrastructure直依存禁止 |
 | 10 | command→query Port参照禁止 |
 

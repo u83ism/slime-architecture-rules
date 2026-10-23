@@ -41,8 +41,12 @@ route.group({ prefix: '/api' }, (r) => {
 ```
 
 ### middleware.ts
-- Handles cross-cutting concerns: authentication, rate limiting, CORS, request logging.
-- Must not contain business logic or DB queries.
+- Middleware is the **HTTP gate**. It has three jobs:
+  1. HTTP-specific concerns: CORS, rate limiting, body size limits, webhook signature verification, request logging.
+  2. Converting credentials (cookie, bearer token) into a **principal** — a value describing who the request runs as (a user, an external service, the system itself, or anonymous).
+  3. Coarse role-based authorization (e.g., "admins only").
+- May call `store.ts` / `client.ts` for reads needed by the gate decision (e.g., session lookup). Business judgment is not allowed.
+- Must not perform **resource-level authorization** (e.g., "only the author may edit this post"). The workflow loads the resource and `logic.ts` decides (see below).
 - Returns standardized error responses on rejection (401, 403, 429, etc.).
 
 ### workflow.ts
@@ -103,6 +107,8 @@ if (exists) throw new Error('USER_ALREADY_EXISTS')  // belongs in logic.ts
 - **Logic must be tested**. Because logic is pure, tests require no mocks. (Failing to test logic becomes a Kaachan Error at Lv7.)
 
 - Business threshold values (e.g., "30 days", "3 retries") belong in logic, not in store or workflow.
+
+- **Resource-level authorization is decided in logic.** The workflow loads the resource, then passes the principal and the resource to a logic function (e.g., `postCanEdit(principal, post)`). Middleware cannot decide this because it runs before the resource is loaded.
 
 ```ts
 // OK — business judgment (Result type)

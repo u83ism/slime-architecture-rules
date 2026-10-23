@@ -38,11 +38,13 @@ src/
     ports.ts
     logic.ts
     logic.test.ts
-  cross-auth/
+  domainAuth/                 # Upstream domain (see Lv6)
+    workflow.ts
+    ports.ts
     logic.ts
-    ports.ts
-  cross-notification/
-    ports.ts
+    logic.test.ts
+  orchestrate-order-inventory/
+    workflow.ts
 ```
 
 > Note: `store.ts` is absent from all domain and shared folders at Lv9. It has been split into `ports.ts` (interface specification) and `infrastructure/*/prismaAdapter.ts` (ORM implementation). The word "store" no longer appears in the codebase.
@@ -51,7 +53,7 @@ src/
 
 ## Ports & Adapters Rules (new at Lv9)
 
-### ports.ts in each domain/cross folder
+### ports.ts in each domain folder
 
 - Defines the **interface contracts** the domain depends on — what it needs from the outside world.
 - Contains only TypeScript types — **no implementation, no imports from infrastructure**.
@@ -128,17 +130,16 @@ infrastructure/*/      →  domainXxx/workflow.ts                        ❌
 
 ---
 
-## Cross Folder Rules (unchanged from Lv7–Lv8)
+## Orchestrate Folder Rules (unchanged from Lv7–Lv8)
 
-- `cross-[kebab-case]` naming. Domains import from `cross-`, not the reverse.
-- Cross folders may also have `ports.ts` for their own infrastructure boundaries.
-- `cross-` folders specialized for transactions (Lv8 rule continues).
+- `orchestrate-[kebab-case]` naming. `orchestrate-` folders import from domains, not the reverse.
+- `orchestrate-` folders specialized for transactions (Lv8 rule continues).
 
 ---
 
 ## Domain Folder Rules (unchanged from Lv6–Lv8)
 
-- `domain[A-Z]camelCase` naming. Domains must not import from each other.
+- `domain[A-Z]camelCase` naming. Inter-domain imports follow the declared dependency DAG (see Lv6).
 - All Lv1–Lv8 layer rules apply within each domain.
 
 ### Layer rules within each domain
@@ -153,7 +154,7 @@ infrastructure/*/      →  domainXxx/workflow.ts                        ❌
 
 - All domain event type definitions in one file.
 - Events: `{ type: "UPPER_SNAKE_CASE", payload: { ... } }`.
-- No imports from domain or `cross-` folders.
+- No imports from domain or `orchestrate-` folders.
 
 ---
 
@@ -194,9 +195,9 @@ export default {
 ## What Kaachan Checks at Lv9
 
 - `infrastructure/` folder exists.
-- Domain folders and `cross-` folders do not import from `infrastructure/` directly.
+- Domain folders and `orchestrate-` folders do not import from `infrastructure/` directly.
 - ORM/DB module imports are confined to `infrastructure/`.
-- `ports.ts` in each domain/cross folder contains only type definitions (no implementation code, no ORM imports).
+- `ports.ts` in each domain folder contains only type definitions (no implementation code, no ORM imports).
 - `store.ts` no longer exists anywhere in the codebase (it has been replaced by `ports.ts` + `infrastructure/`).
 - `logic.test.ts` missing → ❌ Error.
 - All Lv8 checks continue to apply.

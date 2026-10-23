@@ -24,9 +24,9 @@ https://qiita.com/u83unlimited/items/8b0e5b51749ccdfde393
 | 3 | `route` → `Middleware` → `Parse` → `Workflow` | **「Parse, don't validate」** 原則の導入。Parse層がHTTP境界を担い、WorkflowをHTTP依存から切り離す |
 | 4 | `Workflow` → `Store`(query*/command*命名) / `Client` | **レイヤードアーキテクチャ**の確立。Query/Command命名規則でCQRS的な読み書き意識の芽を植える |
 | 5 | + `Logic`（純粋関数・Result型） | **Decision Objectパターン**の導入。Result型（Railway Oriented Programming）で例外を排除し、ビジネス判断を副作用なし関数に閉じ込める。**Functional Core, Imperative Shell**（Gary Bernhardt）の萌芽 ── Logicが純粋なコア、Workflowが命令型のシェルになる構造が始まる |
-| 6 | `App` / `Domain(s)` / `Shared` / `Client`(+`Adapter`) | **ドメイン駆動設計（DDD）** 本格導入。腐敗防止層（ACL）によるclient/adapter分離。ドメイン間相互参照禁止 |
-| 7 | + `cross-Domain` / Logicテスト義務化 | ドメイン間調整を`cross-`フォルダとして構造化。階層制約でドメインの依存方向を強制。post-commitフックによる副作用の外出し |
-| 8 | + `shared/events.ts` / `cross-`がTx専用化 | **ドメインイベント**（DDD）の導入。副作用（失敗許容）とトランザクション（原子性必須）を構造で分離。戻り値方式でイベントの可視性を保証 |
+| 6 | `App` / `Domain(s)` / `Shared` / `Client`(+`Adapter`) | **ドメイン駆動設計（DDD）** 本格導入。腐敗防止層（ACL）によるclient/adapter分離。ドメイン間の依存はDAGとして宣言 |
+| 7 | + `orchestrate-` / Logicテスト義務化 | ドメイン間調整を`orchestrate-`フォルダとして構造化。post-commitフックによる副作用の外出し |
+| 8 | + `shared/events.ts` / `orchestrate-`がTx専用化 | **ドメインイベント**（DDD）の導入。副作用（失敗許容）とトランザクション（原子性必須）を構造で分離。戻り値方式でイベントの可視性を保証 |
 | 9 | + `Domain/ports.ts` / `infrastructure/Adapters` | **ヘキサゴナルアーキテクチャ（Ports & Adapters）** の関数型実装。DIコンテナ・class不要で依存逆転（DIP）を実現。domainからORMへの直接依存が消える。Lv5から始まった**Functional Core, Imperative Shell**が構造として完成。**関数型クリーンアーキテクチャの完成** |
 | 10 | `Domain/command/` + `Domain/query/` + `Infrastructure` | **CQRS**（Greg Young型）の軽量導入。読み書きモデルをフォルダ構造で分離。CAとは独立した別軸のパターンをPorts & Adapters上に統合した**本ドキュメントのゴールの完成形** |
 
@@ -53,13 +53,17 @@ route.ts → [Middleware群] → Workflow → [Response]
 ```
 
 棲み分けの原則：
-- **Middleware**：リクエストが「存在していい」かどうかの関心（認証・認可・レートリミット等）
+- **Middleware**：リクエストが「存在していい」かどうかの関心（認証・ロール単位の認可・レートリミット等）
 - **Workflow**：ビジネスロジックの関心（Middlewareの仕事を持ち込まない）
+
+Middlewareの認証は、Cookieやトークンといった資格情報を「誰の権限で実行されているか」を表す値（**プリンシパル**）に変換する仕事だ。Lv3で出てくるParseが「リクエストボディを型付きの入力に変換する」のと同じ形をしている。
+ただし「この投稿を編集できるのは作成者だけ」のような**リソース単位の認可**は、投稿を読み込むまで判定できないのでMiddlewareではやらない。Lv5以降はLogicの仕事になる。
 
 
 ### アーキテクチャルール
 - routeに実処理を書かない
-- Workflow内に認証・認可・レートリミット等の横断的処理を書かない（Middlewareへ）
+- Workflow内に認証・ロール単位の認可・レートリミット等の横断的処理を書かない（Middlewareへ）
+- リソース単位の認可（「作成者のみ編集可」等）はMiddlewareに書かない（Lv5以降はLogicへ）
 
 > 💧 **Kaachan/Slime**: 上記ルールの自動検知・Slimeが提供するauth等の公式Middlewareについては[FW文書](./🤤%20僕の考えた最強の次世代Webアプリケーションフレームワーク（案）.md#lv-2-1)参照
 
@@ -333,7 +337,24 @@ Lv1-5ではHTTPリクエスト → route.ts → Workflowという1本道だっ�
 - Sharedフォルダを新設してそっちに入れる
 
 ように促す。Sharedは「共有ロジック/ドメイン切るほどでもない小ロジックと未分化DBアクセス」の一時置き場。`utility.ts` / `smallLogic.ts` は純粋関数のみ。`store.ts` はDBアクセスを許容するが、どちらも肥大化にはアラートが出る。
-domain間の相互参照は禁止で、App層だけが複数ドメインへのアクセスが可能になる。
+domain間の参照は、設定ファイルで依存の向きを宣言した場合に限り許可する（宣言外の向きと循環は禁止）。App層は全ドメインにアクセスできる。
+
+```ts
+// slime.config.ts
+export default {
+  domains: {
+    domainAuth: [],                            // 最上流：どのドメインにも依存しない
+    domainUser: ['domainAuth'],
+    domainOrder: ['domainAuth', 'domainUser'],
+  },
+}
+```
+
+全面禁止にすると、小規模なアプリではApp層に「別ドメインのデータを取ってくるだけ」の薄いWorkflowが量産される。一方で無制限に許すと循環が生まれる。そこで「循環さえしなければよい」という非循環依存の原則に従い、DDDのコンテキストマップでいう上流・下流の関係を宣言させる形にした。宣言なので依存は暗黙にならない。
+
+このように「向きはあるが、たどっても一周しない」依存関係をDAG（Directed Acyclic Graph・有向非巡回グラフ）と呼ぶ。循環さえなければドメインを上流から一列に並べられるので、上流から順にビルド・テスト・理解できる。Excelで循環参照がエラーになるのと同じ理屈だ。
+
+認証やテナントのように多くのドメインが使う業務能力は、専用のフォルダを作らず「どのドメインにも依存しない最上流のドメイン」として宣言する。認証のMiddleware自体は`app/middleware.ts`に置き、そこから上流ドメインを呼ぶ。
 
 またここからstore（DBアクセス層）、client（外部APIアクセス層）の扱いを若干変え、
 **storeはドメインへの切り出しを促し、client.tsはclientフォルダを切ってそちらに一旦移動するように促す。**
@@ -356,7 +377,7 @@ domain間の相互参照は禁止で、App層だけが複数ドメインへの�
   - `utility.ts` / `smallLogic.ts` は純粋関数のみ（副作用禁止）
   - `store.ts` はDBアクセス許容（ドメイン未分化の一時置き場）
   - 肥大化を避ける
-  - domainフォルダのファイルをimportしない（それはcross-domainの仕事）
+  - domainフォルダのファイルをimportしない
 - client
   - client.ts は adapter.ts 経由でのみ呼び出す（直呼び出し禁止）
 - store
@@ -364,7 +385,7 @@ domain間の相互参照は禁止で、App層だけが複数ドメインへの�
   - query系関数内にcommandが混在したらエラー（逆も同様）
 - domain
   - **routes.ts にドメイン固有のルート定義・ミドルウェア付与を書く**
-- domain間の相互参照禁止
+- domain間の参照は宣言した依存の向きのみ可（宣言外の向きと循環は禁止）
 
 > 💧 **Kaachan/Slime**: 自動検知の詳細は[FW文書](./🤤%20僕の考えた最強の次世代Webアプリケーションフレームワーク（案）.md#lv-6-1)参照
 
@@ -409,9 +430,9 @@ domain間の相互参照は禁止で、App層だけが複数ドメインへの�
 Lv7は正直Lv6の延長戦だと思っていて、メインの課題は **「ビジネスロジック≒ドメインの肥大化をどう整理すべきか」** になる。
 
 - **各logic.tsに対してテストがない場合、エラー扱い**にします。
-- 複数ドメインアクセスが唯一可能なAppを肥大化することが想定されるので、`cross-`というprefixを付けたフォルダを作成すると、そこもそこから複数ドメインアクセス可能にする
-  - `cross-`フォルダからAppの参照は禁止。
-- ドメインも入れ子になると想定し、上位→下位しか参照できないという制約を追加。
+- 全ドメインにアクセスできるAppが肥大化することが想定されるので、`orchestrate-`というprefixを付けたフォルダを作成すると、そこからも複数ドメインにアクセスできるようにする
+  - `orchestrate-`フォルダからAppの参照は禁止。ドメインから`orchestrate-`の参照も禁止（調整役はドメインの上に立つ）
+  - 旧版では`cross-`と呼んでいた。この名前に「ドメインの上に立つ調整役」と「ドメインの下に敷く土台（認証等）」の2つの意味が混在していたため、土台はLv6の最上流ドメインに吸収し、調整役を`orchestrate-`とした
 - **post-commitフック**を導入。トランザクション内で `defer()` を呼ぶと**コミット成功後**に実行されるhookとして動作し、トランザクションのロック時間を最小化する。トランザクション外で呼ぶと**メイン処理完了後**に in-process で即実行するpost-operationフックとして動作する（単一テーブルへの書き込み等、トランザクション不要なケースでの軽量副作用に使う）。重い処理は Queue（別プロセス）に任せる。
 
 ### アーキテクチャルール
@@ -421,8 +442,8 @@ Lv7は正直Lv6の延長戦だと思っていて、メインの課題は **「�
 - Shared
   - 肥大化しない
 - domain
-  - 上位から下位ドメインの参照のみ可。下位ドメイン同士の参照禁止
-- cross-domain
+  - `orchestrate-`フォルダを参照しない
+- orchestrate-
   - 複数ドメイン参照可。App参照禁止
 - Logic
   - 対応するlogic.test.tsが存在しない場合はエラー
@@ -482,21 +503,21 @@ export const CreateUserWorkflow = async (input: unknown) => {
  │    ├─ routes.ts
  │    └─ ...（同様の構造）
  │
- └─ cross-userOrder/        ← Lv7で追加（複数ドメイン参照可。App参照禁止）
+ └─ orchestrate-user-order/ ← Lv7で追加（複数ドメイン参照可。App参照禁止）
       └─ workflow.ts
 ```
 
 ## Lv 8
-Lv8では**ドメインイベントを使ってcross-フォルダの特化と副作用の整理**をするよ！
+Lv8では**ドメインイベントを使ってorchestrate-フォルダの特化と副作用の整理**をするよ！
 
-Lv7の`cross-`フォルダは「複数ドメインを直接参照できる場所」として機能してきたけれども、肥大化するにつれて「第二のApp層」になる問題があるんだ。Lv8ではこれを解決するために**ドメインイベント**を導入する。LaravelにもEventがあるけど、あれを使って複数ドメインをまたぐ処理の一部を整理する。
+Lv7の`orchestrate-`フォルダは「複数ドメインを直接参照できる場所」として機能してきたけれども、肥大化するにつれて「第二のApp層」になる問題があるんだ。Lv8ではこれを解決するために**ドメインイベント**を導入する。LaravelにもEventがあるけど、あれを使って複数ドメインをまたぐ処理の一部を整理する。
 具体的なユースケースとしては、**「ユーザー登録後のウェルカムメール送信」「注文確定後のポイント付与」「記事投稿後のフォロワー通知」** といったケースだ。共通しているのは「**本体の処理が成功した後に発生する副作用であり、失敗してもロールバックは不要**」という点。ウェルカムメールが送れなくてもユーザーは登録できているし、ポイント付与が遅延してもそれは別途リカバリできる。
 逆に「注文作成と在庫減算を必ず同時に成功・失敗させたい」というような絶対にDB上の整合性を取らないといけない処理（＝トランザクション貼るような処理）には適用できない。
 
 よって、
 
 - **副作用（トランザクション後・失敗許容）** → ドメインイベント経由
-- **原子性が必要な複数ドメイン操作** → `cross-`フォルダ継続（トランザクション専用に特化）
+- **原子性が必要な複数ドメイン操作** → `orchestrate-`フォルダ継続（トランザクション専用に特化）
 
 という分け方になる。
 
@@ -511,7 +532,7 @@ Lv7の`cross-`フォルダは「複数ドメインを直接参照できる場所
 - shared/events.ts
   - Eventはオブジェクト型のみ（クラスインスタンス禁止）
   - `type` フィールド（discriminated union）必須
-- cross-フォルダ
+- orchestrate-フォルダ
   - `withTransaction()` を伴わない処理のみで構成されている場合は警告（「これはイベントで書けるはず」）
   - メール送信・外部API呼び出し等の非トランザクション処理を含まない
 
@@ -547,7 +568,7 @@ export const CreateUserWorkflow = async (input: unknown) => {
   return event.payload
 }
 
-// cross-/orderInventory/workflow.ts（原子性が必要な処理はcross-が担当）
+// orchestrate-order-inventory/workflow.ts（原子性が必要な処理はorchestrate-が担当）
 export const createOrderWithInventory = (input: unknown) =>
   withTransaction(async () => {
     const event = await orderDomain.createOrder(input)
@@ -587,7 +608,7 @@ export const createOrderWithInventory = (input: unknown) =>
  │    ├─ routes.ts
  │    └─ ...（同様の構造）
  │
- └─ cross-*/                ← トランザクション専用に特化（非トランザクション処理は警告）
+ └─ orchestrate-*/                ← トランザクション専用に特化（非トランザクション処理は警告）
 ```
 
 > 💡 **ADR**: [なぜイベントバス（emit/on）ではなく戻り値方式を選んだか](./Kaachan%26Slime%26Slime%20Architecture構想の設計根拠、補足資料.md#adr-lv8なぜイベントバスemitonではなく戻り値方式を選んだか)
@@ -754,7 +775,7 @@ ORMをDrizzleや別のものに変えたいなら `infrastructure/user/drizzleAd
  │    ├─ logic.ts
  │    └─ （store.tsの実装部分が infrastructure/ へ移動し、仕様部分が ports.ts に）
  │
- ├─ cross-*/
+ ├─ orchestrate-*/
  │
  └─ infrastructure/          ← Lv9で追加（実装だけ）
       ├─ user/
@@ -890,7 +911,7 @@ domainUser/
  │    ├─ command/
  │    └─ query/
  │
- ├─ cross-*/
+ ├─ orchestrate-*/
  │
  └─ infrastructure/
       ├─ user/

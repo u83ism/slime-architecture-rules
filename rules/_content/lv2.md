@@ -39,8 +39,12 @@ route.get('/users/:id', async (req, res) => {
 ```
 
 ### middleware.ts
-- Handles cross-cutting concerns: authentication, rate limiting, CORS, request logging.
-- Must not contain business logic or DB queries.
+- Middleware is the **HTTP gate**. It has three jobs:
+  1. HTTP-specific concerns: CORS, rate limiting, body size limits, webhook signature verification, request logging.
+  2. Converting credentials (cookie, bearer token) into a **principal** — a value describing who the request runs as (a user, an external service, the system itself, or anonymous).
+  3. Coarse role-based authorization (e.g., "admins only").
+- Reads needed for the gate decision (e.g., session lookup) are allowed. Business judgment is not.
+- Must not perform **resource-level authorization** (e.g., "only the author may edit this post"). That requires loading the resource first and belongs in the workflow (in `logic.ts` from Lv5).
 - Returns standardized error responses on rejection (401, 403, 429, etc.).
 
 ```ts

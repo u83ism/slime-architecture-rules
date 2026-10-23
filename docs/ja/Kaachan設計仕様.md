@@ -107,8 +107,8 @@ Kaachanが既に持つ制約ルールをimportグラフ解析で自動検証す�
 
 | ルール | 検出方法 | 適用Lv |
 |---|---|---|
-| domain間の相互参照禁止 | importグラフ解析 | Lv6〜 |
-| Appからのみドメイン参照可能 | importグラフ解析 | Lv6〜 |
+| 依存宣言にないdomain間参照・宣言の循環の禁止 | importグラフ解析＋依存宣言 | Lv6〜 |
+| domainからorchestrate-への参照禁止 | importグラフ解析 | Lv7〜 |
 | WorkflowがORMを直接importしない | importグラフ解析 | Lv4〜 |
 | infrastructureフォルダ外のORM直接操作禁止 | importグラフ解析 | Lv9〜 |
 
