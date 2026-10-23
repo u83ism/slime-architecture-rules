@@ -243,6 +243,14 @@ export const RULE_CATALOG: readonly RuleDefinition[] = [
 
   // ---- Lv6: domain folders ----
   {
+    id: "folder-name-not-kebab-case",
+    summary: {
+      ja: "`domains/`・`orchestrate/` 直下のフォルダ名がkebab-caseでない",
+      en: "A folder directly under `domains/` or `orchestrate/` is not named in kebab-case",
+    },
+    severity: [[6, "warning"]],
+  },
+  {
     id: "domain-undeclared-import",
     summary: {
       ja: "依存宣言にないdomain間のimport",
@@ -269,8 +277,8 @@ export const RULE_CATALOG: readonly RuleDefinition[] = [
   {
     id: "error-code-missing-prefix",
     summary: {
-      ja: "domainのエラーコードにdomain名の接頭辞がない（`domainUser` なら `USER_*`）",
-      en: "A domain error code lacks the domain prefix (`domainUser` → `USER_*`)",
+      ja: "domainのエラーコードにdomain名の接頭辞がない（`domains/user` なら `USER_*`）",
+      en: "A domain error code lacks the domain prefix (`domains/user` → `USER_*`)",
     },
     severity: [[6, "warning"]],
   },
@@ -333,8 +341,8 @@ export const RULE_CATALOG: readonly RuleDefinition[] = [
   {
     id: "app-route-defines-routes",
     summary: {
-      ja: "`app/route.ts` にルート定義がある（`domainXxx/routes.ts` へ移動する）",
-      en: "`app/route.ts` defines routes (move them to `domainXxx/routes.ts`)",
+      ja: "`app/route.ts` にルート定義がある（`domains/xxx/routes.ts` へ移動する）",
+      en: "`app/route.ts` defines routes (move them to `domains/xxx/routes.ts`)",
     },
     severity: [[6, "warning"]],
   },
@@ -379,28 +387,28 @@ export const RULE_CATALOG: readonly RuleDefinition[] = [
     severity: [[6, "warning"]],
   },
 
-  // ---- Lv7: orchestrate- ----
+  // ---- Lv7: orchestrate/ ----
   {
     id: "domain-imports-orchestrate",
     summary: {
-      ja: "domainが `orchestrate-` フォルダをimportしている",
-      en: "A domain imports from an `orchestrate-` folder",
+      ja: "domainが `orchestrate/` フォルダをimportしている",
+      en: "A domain imports from an `orchestrate/` folder",
     },
     severity: [[7, "error"]],
   },
   {
     id: "orchestrate-imports-orchestrate",
     summary: {
-      ja: "`orchestrate-` フォルダ同士がimportし合っている",
-      en: "An `orchestrate-` folder imports from another `orchestrate-` folder",
+      ja: "`orchestrate/` フォルダ同士がimportし合っている",
+      en: "An `orchestrate/` folder imports from another `orchestrate/` folder",
     },
     severity: [[7, "error"]],
   },
   {
     id: "orchestrate-imports-app",
     summary: {
-      ja: "`orchestrate-` フォルダが `app/` をimportしている",
-      en: "An `orchestrate-` folder imports from `app/`",
+      ja: "`orchestrate/` フォルダが `app/` をimportしている",
+      en: "An `orchestrate/` folder imports from `app/`",
     },
     severity: [[7, "error"]],
   },
@@ -425,8 +433,8 @@ export const RULE_CATALOG: readonly RuleDefinition[] = [
   {
     id: "events-imports-domain",
     summary: {
-      ja: "`shared/events.ts` がdomainや `orchestrate-` をimportしている",
-      en: "`shared/events.ts` imports from a domain or `orchestrate-` folder",
+      ja: "`shared/events.ts` がdomainや `orchestrate/` をimportしている",
+      en: "`shared/events.ts` imports from a domain or `orchestrate/` folder",
     },
     severity: [[8, "error"]],
   },
@@ -457,16 +465,16 @@ export const RULE_CATALOG: readonly RuleDefinition[] = [
   {
     id: "orchestrate-without-transaction",
     summary: {
-      ja: "`orchestrate-` フォルダに `withTransaction()` がない（ドメインイベントで代替できるはず）",
-      en: "An `orchestrate-` folder has no `withTransaction()` (domain events + `defer()` may suffice)",
+      ja: "`orchestrate/` フォルダに `withTransaction()` がない（ドメインイベントで代替できるはず）",
+      en: "An `orchestrate/` folder has no `withTransaction()` (domain events + `defer()` may suffice)",
     },
     severity: [[8, "warning"]],
   },
   {
     id: "orchestrate-non-transactional-io",
     summary: {
-      ja: "`orchestrate-` フォルダがメール送信・外部API呼び出し等の非トランザクション処理を含んでいる",
-      en: "An `orchestrate-` folder contains non-transactional work (email, external API calls)",
+      ja: "`orchestrate/` フォルダがメール送信・外部API呼び出し等の非トランザクション処理を含んでいる",
+      en: "An `orchestrate/` folder contains non-transactional work (email, external API calls)",
     },
     severity: [[8, "warning"]],
   },

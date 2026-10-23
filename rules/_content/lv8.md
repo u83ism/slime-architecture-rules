@@ -1,7 +1,7 @@
 # Slime Architecture Rules — Level 8 (Shared Events)
 
 This project uses **Slime Architecture**, a progressive layered architecture for TypeScript/Node.js backends.
-The current level is **Lv8**: domain event types are centralized in `shared/events.ts`, and `orchestrate-` folders specialize for transactional operations.
+The current level is **Lv8**: domain event types are centralized in `shared/events.ts`, and `orchestrate/` folders specialize for transactional operations.
 
 ---
 
@@ -22,19 +22,19 @@ src/
   client/
     client.ts
     adapter.ts
-  domainUser/
+  domains/user/
     routes.ts
     workflow.ts     # Returns a domain event after completing state changes
     logic.ts
     logic.test.ts
     store.ts
-  domainOrder/
+  domains/order/
     routes.ts
     workflow.ts
     logic.ts
     logic.test.ts
     store.ts
-  orchestrate-*/    # Specialized for transactional operations (atomic multi-domain writes)
+  orchestrate/*/    # Specialized for transactional operations (atomic multi-domain writes)
 ```
 
 ---
@@ -45,7 +45,7 @@ src/
 - Events represent **things that have already happened** — name them as uppercase constant strings with a discriminant `type` field.
 - Event types are plain TypeScript types — no class hierarchy, no inheritance.
 - Use a `payload` field to carry event data.
-- `shared/events.ts` must not import from any domain or `orchestrate-` folder.
+- `shared/events.ts` must not import from any domain or `orchestrate/` folder.
 
 ```ts
 // shared/events.ts
@@ -70,7 +70,7 @@ export type DomainEvent = UserCreatedEvent | OrderPlacedEvent
 - This keeps event flow visible in code — you can always read `app/workflow.ts` to see the full chain.
 
 ```ts
-// domainUser/workflow.ts — emitting an event as return value
+// domains/user/workflow.ts — emitting an event as return value
 export const createUserWorkflow = async (input: ValidatedInput): Promise<UserCreatedEvent> => {
   const user = await saveUser(input)
   return { type: "USER_CREATED", payload: { userId: user.id, email: user.email } }
@@ -93,16 +93,16 @@ Using an event bus (`emit`/`on`) hides who is listening and whether handlers are
 
 ---
 
-## orchestrate-/ Specialization (new at Lv8)
+## orchestrate/ Specialization (new at Lv8)
 
-At Lv8, `orchestrate-` folders become specialized for **transactional operations** — operations that must atomically succeed or fail together across multiple domains.
+At Lv8, `orchestrate/` folders become specialized for **transactional operations** — operations that must atomically succeed or fail together across multiple domains.
 
-- `orchestrate-` folders should be used when **`withTransaction()` is required** to maintain consistency across domain boundaries.
-- If a `orchestrate-` folder contains no `withTransaction()` usage, Kaachan emits a ⚠️ Warning ("this might be expressible as domain events instead").
-- Non-transactional multi-domain side effects (email, notifications, analytics) belong in domain events + `defer()`, not in `orchestrate-` folders.
+- `orchestrate/` folders should be used when **`withTransaction()` is required** to maintain consistency across domain boundaries.
+- If a `orchestrate/` folder contains no `withTransaction()` usage, Kaachan emits a ⚠️ Warning ("this might be expressible as domain events instead").
+- Non-transactional multi-domain side effects (email, notifications, analytics) belong in domain events + `defer()`, not in `orchestrate/` folders.
 
 ```ts
-// orchestrate-order-inventory/workflow.ts — transactional: atomic order + stock deduction
+// orchestrate/order-inventory/workflow.ts — transactional: atomic order + stock deduction
 export const createOrderWithInventory = (input: ValidatedInput) =>
   withTransaction(async () => {
     const placed = await orderDomain.createOrder(input)
@@ -117,17 +117,17 @@ export const createOrderWithInventory = (input: ValidatedInput) =>
 
 ## Orchestrate Folder Rules (unchanged from Lv7)
 
-- Orchestrate folders: `orchestrate-[kebab-case]`.
-- `orchestrate-` folders may import from domains; domains must not import from `orchestrate-` folders.
-- `orchestrate-` folders must not import from each other or from `app/`.
+- Orchestrate folders: `orchestrate/[kebab-case]`.
+- `orchestrate/` folders may import from domains; domains must not import from `orchestrate/` folders.
+- `orchestrate/` folders must not import from each other or from `app/`.
 
 ---
 
 ## Domain Folder Rules (unchanged from Lv6–Lv7)
 
-- Domain folders: `domain[A-Z]camelCase`.
+- Domain folders: `domains/<kebab-case>/`.
 - Inter-domain imports follow the declared dependency DAG (see Lv6).
-- Domains must not import from `orchestrate-` folders.
+- Domains must not import from `orchestrate/` folders.
 - All Lv1–Lv7 layer rules apply within each domain.
 
 ### Layer rules within each domain
@@ -142,7 +142,7 @@ export const createOrderWithInventory = (input: ValidatedInput) =>
 
 - `app/route.ts` aggregates domain routes only — no inline route definitions.
 - `app/workflow.ts` receives domain events and coordinates downstream workflows.
-- `app/middleware.ts` is the HTTP gate (see Lv6). Credential checks call the upstream domain (e.g., `domainAuth`).
+- `app/middleware.ts` is the HTTP gate (see Lv6). Credential checks call the upstream domain (e.g., `domains/auth`).
 - App layer must not contain `logic.ts`, `store.ts`, or direct `client/` calls.
 
 ---
@@ -150,16 +150,16 @@ export const createOrderWithInventory = (input: ValidatedInput) =>
 ## Error Handling
 
 - **Validation failures**: framework returns HTTP 400. **Auth/middleware rejection**: 401, 403, or 429.
-- **Business rejections travel as return values all the way to the route.** Domain `logic.ts` and `client/adapter.ts` return `Result.err(code)`. Workflows (domain, `orchestrate-`, and app) pass it upward with an early `return`. The response wrapper (`json(...)`) maps the code to a 4xx status.
+- **Business rejections travel as return values all the way to the route.** Domain `logic.ts` and `client/adapter.ts` return `Result.err(code)`. Workflows (domain, `orchestrate/`, and app) pass it upward with an early `return`. The response wrapper (`json(...)`) maps the code to a 4xx status.
 - **Do not throw business rejections** from workflows — return `err(...)`. `throw` is reserved for technical failures (bugs, DB down, network), which become HTTP 500.
 - Workflows that cannot reject may return a plain value.
 - `withTransaction()` rolls back when its callback returns `err` (as well as when it throws) and commits on `ok`.
-- **Each domain declares its own error codes** in `domainXxx/errors.ts`, prefixed with the domain name (`domainUser` → `USER_*`). Domains know nothing about HTTP status codes.
+- **Each domain declares its own error codes** in `domains/xxx/errors.ts`, prefixed with the domain name (`domains/user` → `USER_*`). Domains know nothing about HTTP status codes.
 - The status map lives outside the domains (`slime.config.ts`) and must cover the union of all domain codes. Use `satisfies Record<DomainErrorCode, number>` so a missing entry is a type error.
 - Error responses use **Problem Details** (RFC 9457, `Content-Type: application/problem+json`) with a `code` extension member. Frontends may `import type` the code union to keep their message tables exhaustive.
 
 ```ts
-// domainUser/errors.ts — codes only, no HTTP knowledge
+// domains/user/errors.ts — codes only, no HTTP knowledge
 export type UserErrorCode = "USER_ALREADY_EXISTS" | "USER_NOT_FOUND"
 
 // slime.config.ts — an HTTP status for every code of every domain
@@ -172,7 +172,7 @@ export default {
   } satisfies Record<DomainErrorCode, number>,
 }
 
-// domainUser/workflow.ts — rejections are returned, not thrown
+// domains/user/workflow.ts — rejections are returned, not thrown
 export const createUserWorkflow = async (input: CreateUserInput): Promise<Result<User, UserErrorCode>> => {
   const exists = await findUserByEmail(input.email)
   const check = userCanCreate(!!exists)
@@ -217,10 +217,10 @@ Severity: 💡 Hint = information, ⚠️ Warning = likely problem, ❌ Error = 
 - ❌ Error — `app/store.ts` exists (the App layer must not own DB access)
 - ❌ Error — `app/client.ts` exists (move it to `client/`)
 - ❌ Error — The App layer contains logic (`app/logic.ts` or business judgment)
-- ❌ Error — A domain imports from an `orchestrate-` folder
-- ❌ Error — An `orchestrate-` folder imports from another `orchestrate-` folder
-- ❌ Error — An `orchestrate-` folder imports from `app/`
-- ❌ Error — `shared/events.ts` imports from a domain or `orchestrate-` folder
+- ❌ Error — A domain imports from an `orchestrate/` folder
+- ❌ Error — An `orchestrate/` folder imports from another `orchestrate/` folder
+- ❌ Error — An `orchestrate/` folder imports from `app/`
+- ❌ Error — `shared/events.ts` imports from a domain or `orchestrate/` folder
 - ❌ Error — An event type references a class (events must be plain data)
 - ⚠️ Warning — A route handler does work other than HTTP I/O (store, logic, or DB calls)
 - ⚠️ Warning — `workflow.ts` imports an auth library directly (that is middleware's job)
@@ -233,17 +233,18 @@ Severity: 💡 Hint = information, ⚠️ Warning = likely problem, ❌ Error = 
 - ⚠️ Warning — A logic function has no domain prefix (`userCan*`, etc.)
 - ⚠️ Warning — `logic.ts` exceeds ~500 lines, mixes domain prefixes, or contains function groups whose type dependencies do not intersect
 - ⚠️ Warning — A workflow throws a `DomainError` (from Lv5, return `err()` up to the route instead)
-- ⚠️ Warning — A domain error code lacks the domain prefix (`domainUser` → `USER_*`)
+- ⚠️ Warning — A folder directly under `domains/` or `orchestrate/` is not named in kebab-case
+- ⚠️ Warning — A domain error code lacks the domain prefix (`domains/user` → `USER_*`)
 - ⚠️ Warning — `shared/` imports from a domain folder
-- ⚠️ Warning — `app/route.ts` defines routes (move them to `domainXxx/routes.ts`)
+- ⚠️ Warning — `app/route.ts` defines routes (move them to `domains/xxx/routes.ts`)
 - ⚠️ Warning — `app/route.ts` is too large
 - ⚠️ Warning — A route references a workflow file that does not exist (dead route candidate)
 - ⚠️ Warning — A route past its `sunset` date still exists
 - ⚠️ Warning — `shared/events.ts` does not exist
 - ⚠️ Warning — An event type has no `type` discriminant field
 - ⚠️ Warning — An event's `type` value is not UPPER_SNAKE_CASE
-- ⚠️ Warning — An `orchestrate-` folder has no `withTransaction()` (domain events + `defer()` may suffice)
-- ⚠️ Warning — An `orchestrate-` folder contains non-transactional work (email, external API calls)
+- ⚠️ Warning — An `orchestrate/` folder has no `withTransaction()` (domain events + `defer()` may suffice)
+- ⚠️ Warning — An `orchestrate/` folder contains non-transactional work (email, external API calls)
 - 💡 Hint — API routes are defined outside an `/api` group
 - 💡 Hint — `workflow.ts` exceeds ~300 lines or ~10 functions
 - 💡 Hint — A workflow calls a parse function (parsing belongs in route)
@@ -264,18 +265,18 @@ When implementing a feature that triggers a reaction in another domain (e.g., "w
 2. Have the originating domain's workflow return the event after the state change.
 3. In `app/workflow.ts`, receive the event and call the notification workflow.
 4. If the notification is failure-tolerant, wrap it in `defer()`.
-5. Do **not** create a `orchestrate-` folder for this — use domain events + `defer()` instead.
+5. Do **not** create a `orchestrate/` folder for this — use domain events + `defer()` instead.
 
-When deciding between domain events and `orchestrate-` folder:
+When deciding between domain events and `orchestrate/` folder:
 - **Use domain events + defer()**: when the follow-up can fail without rolling back the primary operation (email, notifications, analytics).
-- **Use orchestrate- + withTransaction()**: when the follow-up must succeed or fail atomically with the primary operation (stock deduction, balance transfer).
+- **Use orchestrate/ + withTransaction()**: when the follow-up must succeed or fail atomically with the primary operation (stock deduction, balance transfer).
 
 ---
 
 ## Next Step: Lv9
 
 To advance to Lv9, introduce Ports & Adapters:
-- `domainXxx/ports.ts` — interface definitions that the domain depends on
+- `domains/xxx/ports.ts` — interface definitions that the domain depends on
 - `infrastructure/` folder — concrete implementations (DB adapters, external service adapters)
 
 Run `slime level:next` to check what is needed.

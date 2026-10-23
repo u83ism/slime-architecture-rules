@@ -12,7 +12,7 @@ TS製。既存の設計論と関数型プログラミングを参考に再設計
         - DBアクセス層（Store）と外部APIアクセス層（Client）はLv4で同時に導入する
 - **コードがFatになってきたら検知**し、hint/warning/errorの3段階でがんがん指摘する。**自動でリファクタリング（過激すぎるのでオプション）は将来構想**
     - Fat Logic対策として、関数のドメインprefix混在検出に加え、**ts-morphによるAST解析で型依存グラフを構築し、互いに型依存が交差しない関数群を異なるドメイン候補として自動検出する**機能を持つ。静的解析でできる限界まで踏み込む姿勢がKaachanらしさ。
-    - Lv6以降は**ドメイン間・層間の依存方向を静的検査**する（`dependency-cruiser`相当）。「domainAが依存宣言にないdomainBをimportしている」「WorkflowがORMを直接importしている」等の依存ルール違反をimportグラフ解析で自動検出。ルールはアーキテクチャレベルに連動して自動設定される。
+    - Lv6以降は**ドメイン間・層間の依存方向を静的検査**する（`dependency-cruiser`相当）。「ドメインAが依存宣言にないドメインBをimportしている」「WorkflowがORMを直接importしている」等の依存ルール違反をimportグラフ解析で自動検出。ルールはアーキテクチャレベルに連動して自動設定される。
     - opinionatedにがんがん指摘する挙動こそが「母ちゃん」たる所以
 - **ドメイン分割は流石に静的なプログラムによる解析が厳しいので肥大化だけ指摘**。以下4点の理由による。
     - 既存のコーディングAIが比較的得意とする領域で重複してしまい静的プログラミングで対抗するのは負けがみえている
@@ -278,7 +278,7 @@ Slimeが自動カバーする範囲：Parse失敗→400 / Middleware拒否→401
 
 #### Slimeが提供するもの
 - 依存方向の静的検査（`dependency-cruiser`相当）がKaachanに組み込まれる。Lv6以降、アーキテクチャレベルに連動して検査対象が自動増加する
-  - 「domainAが依存宣言にないdomainBをimportしている」
+  - 「ドメインAが依存宣言にないドメインBをimportしている」
   - 「WorkflowがORMを直接importしている」等の依存ルール違反をimportグラフ解析で自動検出
 
 #### Kaachanのお叱りポイント
@@ -286,10 +286,11 @@ Slimeが自動カバーする範囲：Parse失敗→400 / Middleware拒否→401
 - store の関数名が命名規則（`find*` / `list*` / `get*` / `count*` / `search*` / `create*` / `save*` / `update*` / `delete*` / `remove*`）に違反している → ❌ Error（Lv5の💡 Hintから変更）
 - store がORM型を戻り値に使っている → ❌ Error（Lv5の⚠️ Warningから変更）
 - workflow が `DomainError` を投げている（Lv5以降は `err()` でrouteまで返す） → ⚠️ Warning（Lv5の💡 Hintから変更）
+- `domains/`・`orchestrate/` 直下のフォルダ名がkebab-caseでない → ⚠️ Warning
 - 依存宣言にないdomain間のimport → ❌ Error
 - domain間の依存宣言に循環がある → ❌ Error
 - `client/client.ts` を直接importしている（`client/adapter.ts` を経由していない） → ❌ Error
-- domainのエラーコードにdomain名の接頭辞がない（`domainUser` なら `USER_*`） → ⚠️ Warning
+- domainのエラーコードにdomain名の接頭辞がない（`domains/user` なら `USER_*`） → ⚠️ Warning
 - `shared/` がdomainフォルダをimportしている → ⚠️ Warning
 - `shared/utility.ts` / `shared/smallLogic.ts` に副作用がある → ❌ Error
 - `shared/` のファイルが肥大化している → ⚠️ Warning
@@ -297,7 +298,7 @@ Slimeが自動カバーする範囲：Parse失敗→400 / Middleware拒否→401
 - `app/store.ts` が存在する（App層はDBアクセスを持たない） → ⚠️ Warning
 - `app/client.ts` が存在する（`client/` へ移動する） → ❌ Error
 - App層がlogicを持っている（`app/logic.ts` またはビジネス判断の混在） → ⚠️ Warning
-- `app/route.ts` にルート定義がある（`domainXxx/routes.ts` へ移動する） → ⚠️ Warning
+- `app/route.ts` にルート定義がある（`domains/xxx/routes.ts` へ移動する） → ⚠️ Warning
 - `app/route.ts` が肥大化している → ⚠️ Warning
 - ルート定義が存在しないWorkflowファイルを参照している（死んだルート候補） → ⚠️ Warning
 - どのルートからも参照されていないWorkflowがある（到達不能Workflow候補） → 💡 Hint
@@ -334,9 +335,9 @@ return slime.withTransaction(async () => {
 - App層が肥大化している → ❌ Error（Lv6の⚠️ Warningから変更）
 - `app/store.ts` が存在する（App層はDBアクセスを持たない） → ❌ Error（Lv6の⚠️ Warningから変更）
 - App層がlogicを持っている（`app/logic.ts` またはビジネス判断の混在） → ❌ Error（Lv6の⚠️ Warningから変更）
-- domainが `orchestrate-` フォルダをimportしている → ❌ Error
-- `orchestrate-` フォルダ同士がimportし合っている → ❌ Error
-- `orchestrate-` フォルダが `app/` をimportしている → ❌ Error
+- domainが `orchestrate/` フォルダをimportしている → ❌ Error
+- `orchestrate/` フォルダ同士がimportし合っている → ❌ Error
+- `orchestrate/` フォルダが `app/` をimportしている → ❌ Error
 - `withTransaction()` 内に非DBの非同期処理（メール送信・外部API呼び出し等）がある（`defer()` を提案。opt-in） → 💡 Hint
 - Lv6までの検査はすべて継続する
 <!-- END GENERATED -->
@@ -348,12 +349,12 @@ return slime.withTransaction(async () => {
 #### Kaachanのお叱りポイント
 <!-- BEGIN GENERATED: kaachan-checks lv=8 （src/rules-catalog.ts から自動生成。手で編集しない） -->
 - `shared/events.ts` が存在しない → ⚠️ Warning
-- `shared/events.ts` がdomainや `orchestrate-` をimportしている → ❌ Error
+- `shared/events.ts` がdomainや `orchestrate/` をimportしている → ❌ Error
 - イベント型がクラスを含んでいる（純粋なデータ型のみ） → ❌ Error
 - イベント型に `type` フィールド（discriminated union）がない → ⚠️ Warning
 - イベント型の `type` が大文字スネークケースでない → ⚠️ Warning
-- `orchestrate-` フォルダに `withTransaction()` がない（ドメインイベントで代替できるはず） → ⚠️ Warning
-- `orchestrate-` フォルダがメール送信・外部API呼び出し等の非トランザクション処理を含んでいる → ⚠️ Warning
+- `orchestrate/` フォルダに `withTransaction()` がない（ドメインイベントで代替できるはず） → ⚠️ Warning
+- `orchestrate/` フォルダがメール送信・外部API呼び出し等の非トランザクション処理を含んでいる → ⚠️ Warning
 - Lv7までの検査はすべて継続する
 <!-- END GENERATED -->
 
@@ -399,7 +400,7 @@ return slime.withTransaction(async () => {
 | Lv | 追加される検査 |
 |---|---|
 | 6 | 依存宣言にないdomain間参照の禁止・依存宣言の循環禁止 |
-| 7 | orchestrate-からApp、domainからorchestrate-への参照禁止 |
+| 7 | orchestrate/からApp、domainからorchestrate/への参照禁止 |
 | 9 | domain→infrastructure直依存禁止 |
 | 10 | command→query Port参照禁止 |
 

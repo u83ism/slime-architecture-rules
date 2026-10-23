@@ -250,6 +250,6 @@ To advance to Lv6, introduce domain folder separation:
 - `app/` — application-level route, workflow, parse, middleware
 - `shared/` — shared utilities, small logic, and temporary shared DB access
 - `client/` — external API client and adapter (anti-corruption layer)
-- `domainXxx/` — one folder per business domain, each containing its own workflow, store, logic, routes
+- `domains/xxx/` — one folder per business domain, each containing its own workflow, store, logic, routes
 
 Run `slime level:next` to check what is needed.

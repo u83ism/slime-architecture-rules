@@ -77,7 +77,7 @@ parse/
 | **DomainError** | LogicのResult err / 業務的な拒否（ビジネスルール違反） | 4xx |
 | **TechnicalError** | 未捕捉throw / DB障害等（技術的障害） | 500 |
 
-エラーコードは型として宣言し（Lv3〜5は `errors.ts`、Lv6以降は `domainXxx/errors.ts`）、HTTPステータスとの対応表は `slime.config.ts` に置く。対応表は `satisfies Record<DomainErrorCode, number>` で全コードの登録を型で強制する。
+エラーコードは型として宣言し（Lv3〜5は `errors.ts`、Lv6以降は `domains/xxx/errors.ts`）、HTTPステータスとの対応表は `slime.config.ts` に置く。対応表は `satisfies Record<DomainErrorCode, number>` で全コードの登録を型で強制する。
 
 ```ts
 // slime.config.ts
@@ -111,7 +111,7 @@ Kaachanが既に持つ制約ルールをimportグラフ解析で自動検証す�
 | ルール | 検出方法 | 適用Lv |
 |---|---|---|
 | 依存宣言にないdomain間参照・宣言の循環の禁止 | importグラフ解析＋依存宣言 | Lv6〜 |
-| domainからorchestrate-への参照禁止 | importグラフ解析 | Lv7〜 |
+| domainからorchestrate/への参照禁止 | importグラフ解析 | Lv7〜 |
 | WorkflowがORMを直接importしない | importグラフ解析 | Lv4〜 |
 | infrastructureフォルダ外のORM直接操作禁止 | importグラフ解析 | Lv9〜 |
 

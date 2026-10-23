@@ -17,7 +17,7 @@ description: docs/ja/ のドキュメントを読み、rules/_content/ 以下の
 - 各Lvで導入されるファイル・フォルダとその責務
 - 各レイヤーの「やること・やらないこと」ルール
 - Kaachanが静的検査する項目（Hint / Warning / Error の閾値を含む）
-- 命名規則（`find*`, `save*`, `userCan*`, `domain[A-Z]` など）
+- 命名規則（`find*`, `save*`, `userCan*`, `domains/` 直下のkebab-case など）
 - 依存方向ルール（何が何をimportしていいか・いけないか）
 - AI向けのガイダンスとして有用な設計判断の根拠
 

@@ -21,18 +21,18 @@ src/
   client/
     client.ts       # External API calls
     adapter.ts      # Anti-corruption layer: maps external vocabulary to domain vocabulary
-  domainAuth/       # Upstream domain: identity used by many domains (depends on no other domain)
+  domains/auth/       # Upstream domain: identity used by many domains (depends on no other domain)
     workflow.ts
     logic.ts
     store.ts
-  domainUser/       # One folder per business domain
+  domains/user/       # One folder per business domain
     routes.ts       # Route definitions: combines parse and workflow for this domain
     parse.ts        # Input schemas for this domain (moved from app/ at Lv6)
     errors.ts       # Error codes for this domain (USER_*; types only)
     workflow.ts     # Domain workflow (receives parsed input and the principal)
     logic.ts        # Domain business judgment and calculations
     store.ts        # Domain-specific DB access
-  domainOrder/
+  domains/order/
     routes.ts
     parse.ts
     workflow.ts
@@ -44,7 +44,7 @@ src/
 
 ## Domain Folder Rules
 
-- Domain folders are named with the `domain` prefix in camelCase: `domainUser`, `domainOrder`, `domainPayment`.
+- Domain folders live directly under `domains/`, named in kebab-case: `domains/user`, `domains/order`, `domains/order-item`. Everything directly under `domains/` is a domain; nothing else is.
 - Each domain folder is **self-contained**: it owns its workflow, logic, store, and routes.
 - **Inter-domain imports must follow the declared dependency DAG.** Declare in `slime.config.ts` which domains each domain may depend on. Undeclared directions and cycles are forbidden. Nested domains are expressed as declared dependencies too.
 - `app/` may import from any domain regardless of the declaration (to aggregate routes and orchestrate).
@@ -55,19 +55,19 @@ src/
 // slime.config.ts — declared dependency DAG
 export default {
   domains: {
-    domainAuth: [],                            // upstream: depends on no other domain
-    domainUser: ['domainAuth'],
-    domainOrder: ['domainAuth', 'domainUser'],
+    auth: [],                            // upstream: depends on no other domain
+    user: ['auth'],
+    order: ['auth', 'user'],
   },
 }
 
 // OK — declared direction
-// domainOrder/workflow.ts
-import { findUserById } from '../domainUser/store'
+// domains/order/workflow.ts
+import { findUserById } from '../user/store'
 
-// NG — undeclared direction (domainUser does not declare domainOrder)
-// domainUser/workflow.ts
-import { findOrderById } from '../domainOrder/store'  // not allowed
+// NG — undeclared direction (domains/user does not declare domains/order)
+// domains/user/workflow.ts
+import { findOrderById } from '../order/store'  // not allowed
 ```
 
 ### app/route.ts
@@ -76,8 +76,8 @@ import { findOrderById } from '../domainOrder/store'  // not allowed
 
 ```ts
 // app/route.ts
-import { userRoutes } from '../domainUser/routes'
-import { orderRoutes } from '../domainOrder/routes'
+import { userRoutes } from '../domains/user/routes'
+import { orderRoutes } from '../domains/order/routes'
 export const routes = [userRoutes, orderRoutes]
 ```
 
@@ -87,20 +87,20 @@ export const routes = [userRoutes, orderRoutes]
 - Must not contain DB access (`store.ts`), external API calls (`client/`), or infrastructure code.
 
 ### app/parse.ts
-- Holds only schemas shared by multiple domains. Each domain's own input schemas live in `domainXxx/parse.ts`.
+- Holds only schemas shared by multiple domains. Each domain's own input schemas live in `domains/xxx/parse.ts`.
 - Must not access DB or external APIs — pure transformation only.
 
 ### app/middleware.ts
 - The HTTP gate for the whole application (see Lv2–Lv5 rules): HTTP-specific concerns, converting credentials into a principal, and coarse role-based authorization.
-- Credential checks call the upstream domain (e.g., `domainAuth`). Do not place middleware inside domain folders — it inverts dependencies between the domain that owns the middleware and the domains that use it.
+- Credential checks call the upstream domain (e.g., `domains/auth`). Do not place middleware inside domain folders — it inverts dependencies between the domain that owns the middleware and the domains that use it.
 - Must not perform resource-level authorization (that belongs in domain `logic.ts`).
 
-### domainXxx/routes.ts
+### domains/xxx/routes.ts
 - Registers URL patterns, middleware, and the parse + workflow combination for this domain (see Lv3).
 - Middleware is attached explicitly on each route.
 
 ```ts
-// domainUser/routes.ts
+// domains/user/routes.ts
 export const userRoutes = (r: Router) => {
   r.get('/users',     slime.auth(), json(ListUsersWorkflow))
   r.post('/users',    slime.auth(), json(parseCreateUser, CreateUserWorkflow, { status: 201 }))
@@ -108,23 +108,23 @@ export const userRoutes = (r: Router) => {
 }
 ```
 
-### domainXxx/parse.ts
+### domains/xxx/parse.ts
 - Input schemas for this domain. Same rules as Lv3 `parse.ts`.
 
-### domainXxx/workflow.ts
+### domains/xxx/workflow.ts
 - Receives parsed, typed input and the principal from `routes.ts` (see Lv3). Never touches HTTP objects.
 - Calls domain `store.ts` for DB operations and `client/adapter.ts` for external API calls.
 - Must not contain business judgment (belongs in `logic.ts`).
 - Must not import ORM/DB modules directly.
 
-### domainXxx/logic.ts
+### domains/xxx/logic.ts
 - Pure functions only: no DB access, no external API calls, no side effects.
 - Must have domain-prefixed names (`userCan*`, `orderCan*`, `calcOrder*`, etc.).
 - Decides resource-level authorization from the principal and the loaded resource (e.g., `postCanEdit(principal, post)`).
 - Fallible functions return `Result` type — no `throw`.
 - **Must be tested** (`logic.test.ts`). Missing tests are a ⚠️ Warning at Lv6 and become a ❌ Error at Lv7.
 
-### domainXxx/store.ts
+### domains/xxx/store.ts
 - Domain-specific DB reads and writes.
 - Must not return ORM types — return plain domain types only.
 - Naming convention (now **Error** if violated, up from Hint at Lv5):
@@ -162,16 +162,16 @@ export const chargePayment = async (amount: number): Promise<Result<Receipt, "PA
 ## Error Handling
 
 - **Validation failures**: framework returns HTTP 400. **Auth/middleware rejection**: 401, 403, or 429.
-- **Business rejections travel as return values all the way to the route.** Domain `logic.ts` and `client/adapter.ts` return `Result.err(code)`. Workflows (domain, `orchestrate-`, and app) pass it upward with an early `return`. The response wrapper (`json(...)`) maps the code to a 4xx status.
+- **Business rejections travel as return values all the way to the route.** Domain `logic.ts` and `client/adapter.ts` return `Result.err(code)`. Workflows (domain, `orchestrate/`, and app) pass it upward with an early `return`. The response wrapper (`json(...)`) maps the code to a 4xx status.
 - **Do not throw business rejections** from workflows — return `err(...)`. `throw` is reserved for technical failures (bugs, DB down, network), which become HTTP 500.
 - Workflows that cannot reject may return a plain value.
 - `withTransaction()` rolls back when its callback returns `err` (as well as when it throws) and commits on `ok`.
-- **Each domain declares its own error codes** in `domainXxx/errors.ts`, prefixed with the domain name (`domainUser` → `USER_*`). Domains know nothing about HTTP status codes.
+- **Each domain declares its own error codes** in `domains/xxx/errors.ts`, prefixed with the domain name (`domains/user` → `USER_*`). Domains know nothing about HTTP status codes.
 - The status map lives outside the domains (`slime.config.ts`) and must cover the union of all domain codes. Use `satisfies Record<DomainErrorCode, number>` so a missing entry is a type error.
 - Error responses use **Problem Details** (RFC 9457, `Content-Type: application/problem+json`) with a `code` extension member. Frontends may `import type` the code union to keep their message tables exhaustive.
 
 ```ts
-// domainUser/errors.ts — codes only, no HTTP knowledge
+// domains/user/errors.ts — codes only, no HTTP knowledge
 export type UserErrorCode = "USER_ALREADY_EXISTS" | "USER_NOT_FOUND"
 
 // slime.config.ts — an HTTP status for every code of every domain
@@ -184,7 +184,7 @@ export default {
   } satisfies Record<DomainErrorCode, number>,
 }
 
-// domainUser/workflow.ts — rejections are returned, not thrown
+// domains/user/workflow.ts — rejections are returned, not thrown
 export const createUserWorkflow = async (input: CreateUserInput): Promise<Result<User, UserErrorCode>> => {
   const exists = await findUserByEmail(input.email)
   const check = userCanCreate(!!exists)
@@ -234,13 +234,14 @@ Severity: 💡 Hint = information, ⚠️ Warning = likely problem, ❌ Error = 
 - ⚠️ Warning — logic has no corresponding test file (`logic.test.ts`)
 - ⚠️ Warning — `logic.ts` exceeds ~500 lines, mixes domain prefixes, or contains function groups whose type dependencies do not intersect
 - ⚠️ Warning — A workflow throws a `DomainError` (from Lv5, return `err()` up to the route instead)
-- ⚠️ Warning — A domain error code lacks the domain prefix (`domainUser` → `USER_*`)
+- ⚠️ Warning — A folder directly under `domains/` or `orchestrate/` is not named in kebab-case
+- ⚠️ Warning — A domain error code lacks the domain prefix (`domains/user` → `USER_*`)
 - ⚠️ Warning — `shared/` imports from a domain folder
 - ⚠️ Warning — A file in `shared/` is too large
 - ⚠️ Warning — The App layer is too large
 - ⚠️ Warning — `app/store.ts` exists (the App layer must not own DB access)
 - ⚠️ Warning — The App layer contains logic (`app/logic.ts` or business judgment)
-- ⚠️ Warning — `app/route.ts` defines routes (move them to `domainXxx/routes.ts`)
+- ⚠️ Warning — `app/route.ts` defines routes (move them to `domains/xxx/routes.ts`)
 - ⚠️ Warning — `app/route.ts` is too large
 - ⚠️ Warning — A route references a workflow file that does not exist (dead route candidate)
 - ⚠️ Warning — A route past its `sunset` date still exists
@@ -261,7 +262,7 @@ Severity: 💡 Hint = information, ⚠️ Warning = likely problem, ❌ Error = 
 When adding a new feature that spans multiple domains:
 1. Identify which domain owns the primary responsibility.
 2. If data from another domain is needed and that dependency is declared, import it directly. Otherwise, have the app-layer workflow resolve it and pass it as a parameter to the domain workflow.
-3. If multi-domain coordination is complex, suggest preparing for Lv7 (`orchestrate-` folders).
+3. If multi-domain coordination is complex, suggest preparing for Lv7 (`orchestrate/` folders).
 4. Never add an import between domains that is not in the dependency declaration. If a new direction is needed, propose updating the declaration to the user and confirm it creates no cycle.
 
 When `app/route.ts` or `shared/store.ts` is growing large:
@@ -273,7 +274,7 @@ When `app/route.ts` or `shared/store.ts` is growing large:
 ## Next Step: Lv7
 
 To advance to Lv7, introduce:
-- `orchestrate-<name>/` folders that take multi-domain coordination out of the App layer (e.g., `orchestrate-order-inventory/`)
+- `orchestrate/<name>/` folders that take multi-domain coordination out of the App layer (e.g., `orchestrate/order-inventory/`)
 - `defer()` for post-commit side effects
 - Make logic tests mandatory (Error if missing)
 

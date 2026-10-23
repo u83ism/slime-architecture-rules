@@ -89,20 +89,23 @@ import { FOLDER_NAMES } from "@u83ism/architecture-rules"
 FOLDER_NAMES.LOGIC           // "logic"
 FOLDER_NAMES.APP             // "app"
 FOLDER_NAMES.SHARED          // "shared"
+FOLDER_NAMES.CLIENT          // "client"
 FOLDER_NAMES.INFRASTRUCTURE  // "infrastructure"
 FOLDER_NAMES.COMMAND         // "command"
 FOLDER_NAMES.QUERY           // "query"
+FOLDER_NAMES.DOMAINS         // "domains"      直下の各フォルダが1つのドメイン（例: domains/user）
+FOLDER_NAMES.ORCHESTRATE     // "orchestrate"  直下の各フォルダが1つの調整役（例: orchestrate/order-inventory）
 ```
 
 ### `FOLDER_PATTERNS`
 
-特殊なフォルダのパターン定数。
+フォルダ名のパターン定数。
 
 ```ts
 import { FOLDER_PATTERNS } from "@u83ism/architecture-rules"
 
-FOLDER_PATTERNS.DOMAIN             // /^domain[A-Z]/  （例: domainUser, domainOrder）
-FOLDER_PATTERNS.ORCHESTRATE_PREFIX // "orchestrate-"  （例: orchestrate-order-inventory）
+FOLDER_PATTERNS.KEBAB_CASE.test("order-item") // true  domains/・orchestrate/ 直下のフォルダ名は kebab-case
+FOLDER_PATTERNS.KEBAB_CASE.test("orderItem")  // false
 ```
 
 ### `DomainDependencies`
@@ -113,9 +116,9 @@ FOLDER_PATTERNS.ORCHESTRATE_PREFIX // "orchestrate-"  （例: orchestrate-order-
 import type { DomainDependencies } from "@u83ism/architecture-rules"
 
 const domains: DomainDependencies = {
-  domainAuth: [],                            // 最上流：どのドメインにも依存しない
-  domainUser: ["domainAuth"],
-  domainOrder: ["domainAuth", "domainUser"],
+  auth: [],                            // 最上流：どのドメインにも依存しない
+  user: ["auth"],
+  order: ["auth", "user"],
 }
 ```
 

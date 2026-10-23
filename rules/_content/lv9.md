@@ -23,27 +23,27 @@ src/
     adapter.ts
   infrastructure/               # All concrete implementations (the only layer that imports ORM/DB)
     user/
-      prismaAdapter.ts          # Implements UserPort from domainUser/ports.ts
+      prismaAdapter.ts          # Implements UserPort from domains/user/ports.ts
     order/
-      prismaAdapter.ts          # Implements OrderPort from domainOrder/ports.ts
-  domainUser/
+      prismaAdapter.ts          # Implements OrderPort from domains/order/ports.ts
+  domains/user/
     routes.ts
     workflow.ts                 # Receives port as argument — no ORM imports
     ports.ts                    # Interface definitions the domain depends on (new at Lv9)
     logic.ts
     logic.test.ts
-  domainOrder/
+  domains/order/
     routes.ts
     workflow.ts
     ports.ts
     logic.ts
     logic.test.ts
-  domainAuth/                 # Upstream domain (see Lv6)
+  domains/auth/                 # Upstream domain (see Lv6)
     workflow.ts
     ports.ts
     logic.ts
     logic.test.ts
-  orchestrate-order-inventory/
+  orchestrate/order-inventory/
     workflow.ts
 ```
 
@@ -60,7 +60,7 @@ src/
 - Represents "what the domain needs", not "how it is implemented".
 
 ```ts
-// domainUser/ports.ts
+// domains/user/ports.ts
 export type UserPort = {
   findByEmail: (email: string) => Promise<User | null>
   findById: (id: string) => Promise<User | null>
@@ -79,7 +79,7 @@ export type UserPort = {
 
 ```ts
 // infrastructure/user/prismaAdapter.ts
-import { UserPort } from '../../domainUser/ports'
+import { UserPort } from '../../domains/user/ports'
 
 export const prismaUserPort: UserPort = {
   findByEmail: (email) => prisma.user.findUnique({ where: { email } })
@@ -100,7 +100,7 @@ export const prismaUserPort: UserPort = {
 - The **app-layer workflow** (`app/workflow.ts`) wires the concrete infrastructure adapters to domain workflows.
 
 ```ts
-// domainUser/workflow.ts
+// domains/user/workflow.ts
 export const createUserWorkflow =
   (port: UserPort) =>                           // port injected as argument
   async (input: ValidatedInput): Promise<Result<UserCreatedEvent, UserErrorCode>> => {
@@ -112,7 +112,7 @@ export const createUserWorkflow =
   }
 
 // app/workflow.ts — wires infrastructure to domain workflow
-import { createUserWorkflow } from '../domainUser/workflow'
+import { createUserWorkflow } from '../domains/user/workflow'
 import { prismaUserPort } from '../infrastructure/user/prismaAdapter'
 
 export const CreateUserWorkflow = createUserWorkflow(prismaUserPort)
@@ -121,25 +121,25 @@ export const CreateUserWorkflow = createUserWorkflow(prismaUserPort)
 ### Dependency direction
 
 ```
-domainXxx/workflow.ts  →  domainXxx/ports.ts (depends on interface)   ✅
-infrastructure/*/      →  domainXxx/ports.ts (implements interface)    ✅
+domains/xxx/workflow.ts  →  domains/xxx/ports.ts (depends on interface)   ✅
+infrastructure/*/      →  domains/xxx/ports.ts (implements interface)    ✅
 app/workflow.ts        →  infrastructure/*/ (wires concrete adapter)   ✅
-domainXxx/workflow.ts  →  infrastructure/*/ (must NOT know adapter)    ❌
-infrastructure/*/      →  domainXxx/workflow.ts                        ❌
+domains/xxx/workflow.ts  →  infrastructure/*/ (must NOT know adapter)    ❌
+infrastructure/*/      →  domains/xxx/workflow.ts                        ❌
 ```
 
 ---
 
 ## Orchestrate Folder Rules (unchanged from Lv7–Lv8)
 
-- `orchestrate-[kebab-case]` naming. `orchestrate-` folders import from domains, not the reverse.
-- `orchestrate-` folders specialized for transactions (Lv8 rule continues).
+- `orchestrate/[kebab-case]` naming. `orchestrate/` folders import from domains, not the reverse.
+- `orchestrate/` folders specialized for transactions (Lv8 rule continues).
 
 ---
 
 ## Domain Folder Rules (unchanged from Lv6–Lv8)
 
-- `domain[A-Z]camelCase` naming. Inter-domain imports follow the declared dependency DAG (see Lv6).
+- Domain folders: `domains/<kebab-case>/`. Inter-domain imports follow the declared dependency DAG (see Lv6).
 - All Lv1–Lv8 layer rules apply within each domain.
 
 ### Layer rules within each domain
@@ -154,23 +154,23 @@ infrastructure/*/      →  domainXxx/workflow.ts                        ❌
 
 - All domain event type definitions in one file.
 - Events: `{ type: "UPPER_SNAKE_CASE", payload: { ... } }`.
-- No imports from domain or `orchestrate-` folders.
+- No imports from domain or `orchestrate/` folders.
 
 ---
 
 ## Error Handling
 
 - **Validation failures**: framework returns HTTP 400. **Auth/middleware rejection**: 401, 403, or 429.
-- **Business rejections travel as return values all the way to the route.** Domain `logic.ts` and `client/adapter.ts` return `Result.err(code)`. Workflows (domain, `orchestrate-`, and app) pass it upward with an early `return`. The response wrapper (`json(...)`) maps the code to a 4xx status.
+- **Business rejections travel as return values all the way to the route.** Domain `logic.ts` and `client/adapter.ts` return `Result.err(code)`. Workflows (domain, `orchestrate/`, and app) pass it upward with an early `return`. The response wrapper (`json(...)`) maps the code to a 4xx status.
 - **Do not throw business rejections** from workflows — return `err(...)`. `throw` is reserved for technical failures (bugs, DB down, network), which become HTTP 500.
 - Workflows that cannot reject may return a plain value.
 - `withTransaction()` rolls back when its callback returns `err` (as well as when it throws) and commits on `ok`.
-- **Each domain declares its own error codes** in `domainXxx/errors.ts`, prefixed with the domain name (`domainUser` → `USER_*`). Domains know nothing about HTTP status codes.
+- **Each domain declares its own error codes** in `domains/xxx/errors.ts`, prefixed with the domain name (`domains/user` → `USER_*`). Domains know nothing about HTTP status codes.
 - The status map lives outside the domains (`slime.config.ts`) and must cover the union of all domain codes. Use `satisfies Record<DomainErrorCode, number>` so a missing entry is a type error.
 - Error responses use **Problem Details** (RFC 9457, `Content-Type: application/problem+json`) with a `code` extension member. Frontends may `import type` the code union to keep their message tables exhaustive.
 
 ```ts
-// domainUser/errors.ts — codes only, no HTTP knowledge
+// domains/user/errors.ts — codes only, no HTTP knowledge
 export type UserErrorCode = "USER_ALREADY_EXISTS" | "USER_NOT_FOUND"
 
 // slime.config.ts — an HTTP status for every code of every domain
@@ -183,7 +183,7 @@ export default {
   } satisfies Record<DomainErrorCode, number>,
 }
 
-// domainUser/workflow.ts — rejections are returned, not thrown
+// domains/user/workflow.ts — rejections are returned, not thrown
 export const createUserWorkflow = async (input: CreateUserInput): Promise<Result<User, UserErrorCode>> => {
   const exists = await findUserByEmail(input.email)
   const check = userCanCreate(!!exists)
@@ -228,10 +228,10 @@ Severity: 💡 Hint = information, ⚠️ Warning = likely problem, ❌ Error = 
 - ❌ Error — `app/store.ts` exists (the App layer must not own DB access)
 - ❌ Error — `app/client.ts` exists (move it to `client/`)
 - ❌ Error — The App layer contains logic (`app/logic.ts` or business judgment)
-- ❌ Error — A domain imports from an `orchestrate-` folder
-- ❌ Error — An `orchestrate-` folder imports from another `orchestrate-` folder
-- ❌ Error — An `orchestrate-` folder imports from `app/`
-- ❌ Error — `shared/events.ts` imports from a domain or `orchestrate-` folder
+- ❌ Error — A domain imports from an `orchestrate/` folder
+- ❌ Error — An `orchestrate/` folder imports from another `orchestrate/` folder
+- ❌ Error — An `orchestrate/` folder imports from `app/`
+- ❌ Error — `shared/events.ts` imports from a domain or `orchestrate/` folder
 - ❌ Error — An event type references a class (events must be plain data)
 - ❌ Error — A domain folder imports from `infrastructure/` directly
 - ❌ Error — An ORM/DB module is imported outside `infrastructure/`
@@ -248,17 +248,18 @@ Severity: 💡 Hint = information, ⚠️ Warning = likely problem, ❌ Error = 
 - ⚠️ Warning — A logic function has no domain prefix (`userCan*`, etc.)
 - ⚠️ Warning — `logic.ts` exceeds ~500 lines, mixes domain prefixes, or contains function groups whose type dependencies do not intersect
 - ⚠️ Warning — A workflow throws a `DomainError` (from Lv5, return `err()` up to the route instead)
-- ⚠️ Warning — A domain error code lacks the domain prefix (`domainUser` → `USER_*`)
+- ⚠️ Warning — A folder directly under `domains/` or `orchestrate/` is not named in kebab-case
+- ⚠️ Warning — A domain error code lacks the domain prefix (`domains/user` → `USER_*`)
 - ⚠️ Warning — `shared/` imports from a domain folder
-- ⚠️ Warning — `app/route.ts` defines routes (move them to `domainXxx/routes.ts`)
+- ⚠️ Warning — `app/route.ts` defines routes (move them to `domains/xxx/routes.ts`)
 - ⚠️ Warning — `app/route.ts` is too large
 - ⚠️ Warning — A route references a workflow file that does not exist (dead route candidate)
 - ⚠️ Warning — A route past its `sunset` date still exists
 - ⚠️ Warning — `shared/events.ts` does not exist
 - ⚠️ Warning — An event type has no `type` discriminant field
 - ⚠️ Warning — An event's `type` value is not UPPER_SNAKE_CASE
-- ⚠️ Warning — An `orchestrate-` folder has no `withTransaction()` (domain events + `defer()` may suffice)
-- ⚠️ Warning — An `orchestrate-` folder contains non-transactional work (email, external API calls)
+- ⚠️ Warning — An `orchestrate/` folder has no `withTransaction()` (domain events + `defer()` may suffice)
+- ⚠️ Warning — An `orchestrate/` folder contains non-transactional work (email, external API calls)
 - ⚠️ Warning — The `infrastructure/` folder does not exist
 - 💡 Hint — API routes are defined outside an `/api` group
 - 💡 Hint — `workflow.ts` exceeds ~300 lines or ~10 functions
@@ -277,7 +278,7 @@ Severity: 💡 Hint = information, ⚠️ Warning = likely problem, ❌ Error = 
 ## Guidance for AI Assistants
 
 When adding a new external dependency (new DB table, new third-party API):
-1. Define the port interface in `domainXxx/ports.ts` first — describe what the domain needs, not how it is implemented.
+1. Define the port interface in `domains/xxx/ports.ts` first — describe what the domain needs, not how it is implemented.
 2. Create the adapter in `infrastructure/<domain>/` implementing that interface.
 3. Wire the adapter into the domain workflow in `app/workflow.ts`.
 4. Never import the infrastructure adapter directly inside a domain folder.

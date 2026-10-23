@@ -9,6 +9,21 @@
 
 ---
 
+## 構造図の読み方
+
+各Lvの「構造図」は、処理の流れと構造の層を縦横の軸にした図。
+
+- **横軸は処理の流れ**：① 入口（route）→ ② 関門（middleware）→ ③ 変換（parse）→ ④ 指示（workflow）→ ⑤ 判断（logic）→ ⑥ 入出力（store・client・ports）
+- **縦軸は構造の層**：Lv1〜5は `src/` の1行だけ。Lv6以降は `app/`・domain・`client/`・`shared/` などのフォルダが行として増える
+- Lv1〜5（層の時代）は図が横に伸び、Lv6以降（構造の時代）は縦に伸びる。進化論の「層の時代」から「構造の時代」への転換が、図の伸びる向きの変化として見える
+- **黄色の箱**は、そのLvで新しく登場した、または役割が変わったもの
+- **矢印**はリクエストの流れと、行をまたぐ呼び出し
+- **矢印を描いていない呼び出し**：④ 指示の右側（判断・入出力）は、同じ行のWorkflowから呼ばれる。logicとstoreの間に呼び出しはない（矢印を引くとlogicの上を横切ってしまうため省略している）
+
+> 図はMermaidの `block-beta` 図式で書いている。Mermaid 12.2で描画を確認した。GitHub・Qiita・VS Codeのプレビューなどで表示できるかは、各環境が対応しているMermaidの版による（VS Code標準のプレビューはMermaid自体に対応していないため、拡張機能が必要）。
+
+---
+
 ## Lv1 — ルーティングのみ
 
 ### ディレクトリ構造
@@ -16,6 +31,24 @@
 ```
 src/
   route.ts    # HTTPルーティングとリクエスト処理のすべて
+```
+
+### 構造図
+
+`route.ts` の1マスだけ。ここから横に伸びていく。
+
+```mermaid
+block-beta
+  columns 7
+  corner[" "] h1["① 入口"] h2["② 関門"] h3["③ 変換"] h4["④ 指示"] h5["⑤ 判断"] h6["⑥ 入出力"]
+  Lsrc["src/"] route["route.ts<br>ルーティングと処理のすべて"] space space space space space
+  class Lsrc lane
+  class route new
+
+  classDef head fill:none,stroke:none,font-weight:bold
+  classDef lane fill:#e8e8e8,stroke:#999,color:#222,font-weight:bold
+  classDef new fill:#ffe9b3,stroke:#c98a00,color:#222
+  class corner,h1,h2,h3,h4,h5,h6 head
 ```
 
 ### レイヤールール
@@ -59,6 +92,26 @@ src/
   route.ts        # HTTPルーティングのみ
   workflow.ts     # リクエストオーケストレーション
   middleware.ts   # 認証・レートリミット・CORS等
+```
+
+### 構造図
+
+入口の後ろに、関門（`middleware.ts`）と指示（`workflow.ts`）が並ぶ。
+
+```mermaid
+block-beta
+  columns 7
+  corner[" "] h1["① 入口"] h2["② 関門"] h3["③ 変換"] h4["④ 指示"] h5["⑤ 判断"] h6["⑥ 入出力"]
+  Lsrc["src/"] route["route.ts"] mw["middleware.ts"] space wf["workflow.ts"] space space
+  route --> mw
+  mw --> wf
+  class Lsrc lane
+  class mw,wf new
+
+  classDef head fill:none,stroke:none,font-weight:bold
+  classDef lane fill:#e8e8e8,stroke:#999,color:#222,font-weight:bold
+  classDef new fill:#ffe9b3,stroke:#c98a00,color:#222
+  class corner,h1,h2,h3,h4,h5,h6 head
 ```
 
 ### レイヤールール
@@ -119,6 +172,27 @@ src/
   workflow.ts     # 型付きの入力を受け取って処理し、データを返す
   parse.ts        # リクエストのバリデーションと型変換
   errors.ts       # このアプリが返しうるエラーコード（型のみ）
+```
+
+### 構造図
+
+関門と指示の間に変換（`parse.ts`）が入る。routeがparseとWorkflowを組み合わせ、WorkflowはHTTPを知らなくなる。
+
+```mermaid
+block-beta
+  columns 7
+  corner[" "] h1["① 入口"] h2["② 関門"] h3["③ 変換"] h4["④ 指示"] h5["⑤ 判断"] h6["⑥ 入出力"]
+  Lsrc["src/"] route["route.ts"] mw["middleware.ts"] parse["parse.ts"] wf["workflow.ts"] space space
+  route --> mw
+  mw --> parse
+  parse --> wf
+  class Lsrc lane
+  class parse new
+
+  classDef head fill:none,stroke:none,font-weight:bold
+  classDef lane fill:#e8e8e8,stroke:#999,color:#222,font-weight:bold
+  classDef new fill:#ffe9b3,stroke:#c98a00,color:#222
+  class corner,h1,h2,h3,h4,h5,h6 head
 ```
 
 ### レイヤールール
@@ -255,6 +329,27 @@ src/
   client.ts       # 外部API呼び出しすべて（腐敗防止層）
 ```
 
+### 構造図
+
+右端の入出力に `store.ts` と `client.ts` が入る。
+
+```mermaid
+block-beta
+  columns 7
+  corner[" "] h1["① 入口"] h2["② 関門"] h3["③ 変換"] h4["④ 指示"] h5["⑤ 判断"] h6["⑥ 入出力"]
+  Lsrc["src/"] route["route.ts"] mw["middleware.ts"] parse["parse.ts"] wf["workflow.ts"] space io["store.ts<br>client.ts"]
+  route --> mw
+  mw --> parse
+  parse --> wf
+  class Lsrc lane
+  class io new
+
+  classDef head fill:none,stroke:none,font-weight:bold
+  classDef lane fill:#e8e8e8,stroke:#999,color:#222,font-weight:bold
+  classDef new fill:#ffe9b3,stroke:#c98a00,color:#222
+  class corner,h1,h2,h3,h4,h5,h6 head
+```
+
 ### レイヤールール
 
 | ファイル | やること | やらないこと |
@@ -348,6 +443,27 @@ src/
   logic/
     user.ts       # userCan* 系の関数
     order.ts      # orderCan* 系の関数
+```
+
+### 構造図
+
+指示と入出力の間に判断（`logic.ts`）が入り、横一列が完成する。Lv1〜5は「層の時代」で、図は横に伸びる。
+
+```mermaid
+block-beta
+  columns 7
+  corner[" "] h1["① 入口"] h2["② 関門"] h3["③ 変換"] h4["④ 指示"] h5["⑤ 判断"] h6["⑥ 入出力"]
+  Lsrc["src/"] route["route.ts"] mw["middleware.ts"] parse["parse.ts"] wf["workflow.ts"] logic["logic.ts"] io["store.ts<br>client.ts"]
+  route --> mw
+  mw --> parse
+  parse --> wf
+  class Lsrc lane
+  class logic new
+
+  classDef head fill:none,stroke:none,font-weight:bold
+  classDef lane fill:#e8e8e8,stroke:#999,color:#222,font-weight:bold
+  classDef new fill:#ffe9b3,stroke:#c98a00,color:#222
+  class corner,h1,h2,h3,h4,h5,h6 head
 ```
 
 ### レイヤールール
@@ -471,23 +587,56 @@ src/
   client/
     client.ts         # 外部APIアクセス
     adapter.ts        # 腐敗防止層（外部語彙↔ドメイン語彙の変換）
-  domainAuth/         # 上流domain：多くのdomainが使う認証（どのdomainにも依存しない）
+  domains/auth/         # 上流domain：多くのdomainが使う認証（どのdomainにも依存しない）
     workflow.ts
     logic.ts
     store.ts
-  domainUser/
+  domains/user/
     routes.ts         # userドメインのルート定義（parseとWorkflowを組み合わせる）
     parse.ts          # userドメインの入力スキーマ（Lv6でapp/から移動）
     errors.ts         # userドメインのエラーコード（USER_*。型のみ）
     workflow.ts       # parse済みの入力とプリンシパルを受け取る
     logic.ts          # userドメインの業務判断・計算
     store.ts          # userドメインのDBアクセス
-  domainOrder/
+  domains/order/
     routes.ts
     parse.ts
     workflow.ts
     logic.ts
     store.ts
+```
+
+### 構造図
+
+ここから「構造の時代」で、図は縦に伸びる。`middleware.ts` は認証の照会で最上流の `domains/auth/` を呼ぶ（矢印は省略）。
+
+```mermaid
+block-beta
+  columns 7
+  corner[" "] h1["① 入口"] h2["② 関門"] h3["③ 変換"] h4["④ 指示"] h5["⑤ 判断"] h6["⑥ 入出力"]
+  Lapp["app/"] route["route.ts<br>集約"] mw["middleware.ts"] space awf["workflow.ts<br>ドメイン横断"] space space
+  space:7
+  Luser["domains/user/"] routes["routes.ts"] space parse["parse.ts"] uwf["workflow.ts"] ulogic["logic.ts"] ustore["store.ts"]
+  space:7
+  Lclient["client/"] space space space space space adapter["adapter.ts"]
+  space:7
+  Lauth["domains/auth/<br>最上流"] space space space authwf["workflow.ts"] authlogic["logic.ts"] authstore["store.ts"]
+  space:7
+  Lshared["shared/"] space space space space slogic["smallLogic.ts"] sstore["store.ts"]
+  route --> routes
+  routes --> mw
+  mw --> parse
+  parse --> uwf
+  awf --> uwf
+  uwf --> adapter
+  uwf --> authwf
+  class Lapp,Luser,Lauth,Lshared,Lclient lane
+  class routes,parse,awf,authwf,authlogic,authstore,adapter,slogic,sstore new
+
+  classDef head fill:none,stroke:none,font-weight:bold
+  classDef lane fill:#e8e8e8,stroke:#999,color:#222,font-weight:bold
+  classDef new fill:#ffe9b3,stroke:#c98a00,color:#222
+  class corner,h1,h2,h3,h4,h5,h6 head
 ```
 
 ### レイヤールール
@@ -496,7 +645,7 @@ src/
 
 | 原則 | 内容 |
 |---|---|
-| 命名 | `domain[A-Z]camelCase`（例: `domainUser`, `domainOrder`） |
+| 命名 | `domains/` の直下にkebab-caseで置く（例: `domains/user`, `domains/order-item`）。`domains/` 直下にあるものがdomainで、それ以外はdomainではない |
 | 自己完結 | 各domainはroutes / parse / workflow / logic / storeを持つ |
 | 依存はDAGで宣言 | domain間のimportは、設定ファイルで宣言した依存の向きに限り可。宣言外の向きと循環は禁止 |
 | App層は全domain参照可 | App層は宣言に関係なく全domainをimportできる（ルートの集約とオーケストレーションのため） |
@@ -509,9 +658,9 @@ src/
 // slime.config.ts
 export default {
   domains: {
-    domainAuth: [],                            // 最上流：どのdomainにも依存しない
-    domainUser: ['domainAuth'],
-    domainOrder: ['domainAuth', 'domainUser'],
+    auth: [],                            // 最上流：どのdomainにも依存しない
+    user: ['auth'],
+    order: ['auth', 'user'],
   },
 }
 ```
@@ -528,7 +677,7 @@ export default {
 |---|---|---|
 | `app/route.ts` | domainルートをimportして束ねるだけ | ルート定義・Middleware定義 |
 | `app/workflow.ts` | 複数domainをまたぐオーケストレーション | ビジネス判断・DBアクセス・client直接呼び出し |
-| `app/parse.ts` | 複数domainで共有するスキーマだけ | domain固有のスキーマ（`domainXxx/parse.ts`へ） |
+| `app/parse.ts` | 複数domainで共有するスキーマだけ | domain固有のスキーマ（`domains/xxx/parse.ts`へ） |
 
 App層が持ってはいけないもの: `logic.ts` / `store.ts` / `client/`の直接呼び出し
 
@@ -548,18 +697,18 @@ shared/ はdomainフォルダをimportしない。
 - `client/adapter.ts`：外部API語彙→ドメイン語彙への変換。外部エラー→DomainError（Result.err）またはTechnicalError（throw）
 - domainのWorkflowは`client/adapter.ts`を直接importしてよい。`client/client.ts`を直接呼ぶのは禁止（必ずadapter経由）。adapterは外部の語彙をドメインの語彙に翻訳済みなので、domainから見ればstoreと同じ立場にある
 
-#### domainXxx/ 内のルール（Lv1〜5のルールが各domainに適用される）
+#### domains/xxx/ 内のルール（Lv1〜5のルールが各domainに適用される）
 
 - `parse.ts`：このdomainの入力スキーマ。ルールはLv3の`parse.ts`と同じ
-- `errors.ts`：このdomainのエラーコード（型のみ）。名前にdomain名の接頭辞を付ける（`domainUser` なら `USER_*`）。HTTPステータスとの対応はdomainの外（`slime.config.ts`）に置き、全domainのコードの和集合に対して `satisfies` で登録漏れを検出する
+- `errors.ts`：このdomainのエラーコード（型のみ）。名前にdomain名の接頭辞を付ける（`domains/user` なら `USER_*`）。HTTPステータスとの対応はdomainの外（`slime.config.ts`）に置き、全domainのコードの和集合に対して `satisfies` で登録漏れを検出する
 - `workflow.ts`：`routes.ts`でparse済みの入力とプリンシパルを受け取る。ORM直接importは禁止。外部APIは`client/adapter.ts`経由で呼ぶ
 - `logic.ts`：ドメインprefix命名必須、Result型、テスト必須（Lv5〜6はテストなしがWarning、Lv7でError化）
 - `store.ts`：命名規則違反は**❌ Error**（Lv4の💡 HintからLv6でError化）、ORM型の戻り値禁止
 
-#### domainXxx/routes.ts の構造
+#### domains/xxx/routes.ts の構造
 
 ```ts
-// domainUser/routes.ts
+// domains/user/routes.ts
 export const userRoutes = (r: Router) => {
   r.get('/users',     slime.auth(), json(ListUsersWorkflow))
   r.post('/users',    slime.auth(), json(parseCreateUser, CreateUserWorkflow, { status: 201 }))
@@ -573,10 +722,11 @@ export const userRoutes = (r: Router) => {
 - store の関数名が命名規則（`find*` / `list*` / `get*` / `count*` / `search*` / `create*` / `save*` / `update*` / `delete*` / `remove*`）に違反している → ❌ Error（Lv5の💡 Hintから変更）
 - store がORM型を戻り値に使っている → ❌ Error（Lv5の⚠️ Warningから変更）
 - workflow が `DomainError` を投げている（Lv5以降は `err()` でrouteまで返す） → ⚠️ Warning（Lv5の💡 Hintから変更）
+- `domains/`・`orchestrate/` 直下のフォルダ名がkebab-caseでない → ⚠️ Warning
 - 依存宣言にないdomain間のimport → ❌ Error
 - domain間の依存宣言に循環がある → ❌ Error
 - `client/client.ts` を直接importしている（`client/adapter.ts` を経由していない） → ❌ Error
-- domainのエラーコードにdomain名の接頭辞がない（`domainUser` なら `USER_*`） → ⚠️ Warning
+- domainのエラーコードにdomain名の接頭辞がない（`domains/user` なら `USER_*`） → ⚠️ Warning
 - `shared/` がdomainフォルダをimportしている → ⚠️ Warning
 - `shared/utility.ts` / `shared/smallLogic.ts` に副作用がある → ❌ Error
 - `shared/` のファイルが肥大化している → ⚠️ Warning
@@ -584,7 +734,7 @@ export const userRoutes = (r: Router) => {
 - `app/store.ts` が存在する（App層はDBアクセスを持たない） → ⚠️ Warning
 - `app/client.ts` が存在する（`client/` へ移動する） → ❌ Error
 - App層がlogicを持っている（`app/logic.ts` またはビジネス判断の混在） → ⚠️ Warning
-- `app/route.ts` にルート定義がある（`domainXxx/routes.ts` へ移動する） → ⚠️ Warning
+- `app/route.ts` にルート定義がある（`domains/xxx/routes.ts` へ移動する） → ⚠️ Warning
 - `app/route.ts` が肥大化している → ⚠️ Warning
 - ルート定義が存在しないWorkflowファイルを参照している（死んだルート候補） → ⚠️ Warning
 - どのルートからも参照されていないWorkflowがある（到達不能Workflow候補） → 💡 Hint
@@ -595,16 +745,16 @@ export const userRoutes = (r: Router) => {
 
 ### 🆕 Lv6で追加されたこと
 
-- ドメインフォルダ分割（`app/` / `shared/` / `client/` / `domainXxx/`）
-- `domainXxx/routes.ts`：URLパターン・Middleware・Workflowの対応をdomainに同居
+- ドメインフォルダ分割（`app/` / `shared/` / `client/` / `domains/xxx/`）
+- `domains/xxx/routes.ts`：URLパターン・Middleware・Workflowの対応をdomainに同居
 - `client/adapter.ts`：腐敗防止層の明示化（domainのWorkflowから直接呼ぶ）
-- `domainXxx/parse.ts`：parseをdomainへ移動（`app/parse.ts`は共有スキーマのみ）
+- `domains/xxx/parse.ts`：parseをdomainへ移動（`app/parse.ts`は共有スキーマのみ）
 - store命名規則違反がErrorに昇格（Lv4の推奨 → Lv6の強制）
 - ドメイン間の依存をDAGとして宣言（多くのdomainが使う能力は最上流のdomainとして扱う）
 
 ---
 
-## Lv7 — orchestrate-フォルダ
+## Lv7 — orchestrate/フォルダ
 
 ### ディレクトリ構造
 
@@ -622,36 +772,67 @@ src/
   client/
     client.ts
     adapter.ts
-  domainUser/
+  domains/user/
     routes.ts
     workflow.ts
     logic.ts
     logic.test.ts   # ← Lv7から必須（ないと❌ Error）
     store.ts
-  domainOrder/
+  domains/order/
     routes.ts
     workflow.ts
     logic.ts
     logic.test.ts
     store.ts
-  orchestrate-order-inventory/  # 複数domainをまたぐ調整役（App層から切り出したもの）
+  orchestrate/order-inventory/  # 複数domainをまたぐ調整役（App層から切り出したもの）
     workflow.ts
+```
+
+### 構造図
+
+`app/` と domain の間に調整役の `orchestrate/` が入る。`shared/` と `client/` はLv6と同じなので省略。
+
+```mermaid
+block-beta
+  columns 7
+  corner[" "] h1["① 入口"] h2["② 関門"] h3["③ 変換"] h4["④ 指示"] h5["⑤ 判断"] h6["⑥ 入出力"]
+  Lapp["app/"] route["route.ts<br>集約"] mw["middleware.ts"] space awf["workflow.ts"] space space
+  space:7
+  Lorc["orchestrate/xxx/"] space space space owf["workflow.ts<br>ドメイン横断の調整"] space space
+  space:7
+  Ldom["domains/xxx/"] routes["routes.ts"] space parse["parse.ts"] wf["workflow.ts"] logic["logic.ts<br>＋logic.test.ts"] store["store.ts"]
+  space:7
+  Lauth["domains/auth/<br>最上流"] space space space authwf["workflow.ts"] authlogic["logic.ts"] authstore["store.ts"]
+  route --> routes
+  routes --> mw
+  mw --> parse
+  parse --> wf
+  awf --> owf
+  owf --> wf
+  wf --> authwf
+  class Lapp,Lorc,Ldom,Lauth lane
+  class owf,logic new
+
+  classDef head fill:none,stroke:none,font-weight:bold
+  classDef lane fill:#e8e8e8,stroke:#999,color:#222,font-weight:bold
+  classDef new fill:#ffe9b3,stroke:#c98a00,color:#222
+  class corner,h1,h2,h3,h4,h5,h6 head
 ```
 
 ### レイヤールール
 
-#### orchestrate-フォルダの原則
+#### orchestrate/フォルダの原則
 
-orchestrate-は、App層に集中する「複数domainをまたぐ調整」を切り出す場所。domainの**上**に立つ。
+orchestrate/は、App層に集中する「複数domainをまたぐ調整」を切り出す場所。domainの**上**に立つ。
 
 | 原則 | 内容 |
 |---|---|
-| 命名 | `orchestrate-[kebab-case]`（例: `orchestrate-order-inventory`） |
+| 命名 | `orchestrate/[kebab-case]`（例: `orchestrate/order-inventory`） |
 | 作るとき | 複数domainをまたぐ調整がApp層を肥大化させているとき。特に複数domainの更新を原子的に行う必要があるとき |
 | 作らないとき | 多くのdomainが使う業務能力（認証・テナント等）。それは最上流のdomainとして扱う（Lv6参照） |
-| import方向 | orchestrate- → domain ✅、orchestrate- → shared ✅、domain → orchestrate- ❌、orchestrate- → orchestrate- ❌、orchestrate- → app ❌ |
+| import方向 | orchestrate/ → domain ✅、orchestrate/ → shared ✅、domain → orchestrate/ ❌、orchestrate/ → orchestrate/ ❌、orchestrate/ → app ❌ |
 
-> **cross-からの改名**：旧版では`cross-`の名前に「domainの上に立つ調整役」と「domainの下に敷く土台（cross-auth等）」の2つの意味が混在しており、文書によって依存の向きが逆になっていた。土台はLv6の最上流domainに吸収し、調整役を`orchestrate-`として残した。
+> **cross-からの改名**：旧版では`cross-`の名前に「domainの上に立つ調整役」と「domainの下に敷く土台（cross-auth等）」の2つの意味が混在しており、文書によって依存の向きが逆になっていた。土台はLv6の最上流domainに吸収し、調整役を`orchestrate/`として残した。
 
 #### defer() — post-commitフック（Lv7で導入）
 
@@ -688,16 +869,16 @@ Lv6のドメイン間依存宣言（DAG）に吸収された。入れ子のdomai
 - App層が肥大化している → ❌ Error（Lv6の⚠️ Warningから変更）
 - `app/store.ts` が存在する（App層はDBアクセスを持たない） → ❌ Error（Lv6の⚠️ Warningから変更）
 - App層がlogicを持っている（`app/logic.ts` またはビジネス判断の混在） → ❌ Error（Lv6の⚠️ Warningから変更）
-- domainが `orchestrate-` フォルダをimportしている → ❌ Error
-- `orchestrate-` フォルダ同士がimportし合っている → ❌ Error
-- `orchestrate-` フォルダが `app/` をimportしている → ❌ Error
+- domainが `orchestrate/` フォルダをimportしている → ❌ Error
+- `orchestrate/` フォルダ同士がimportし合っている → ❌ Error
+- `orchestrate/` フォルダが `app/` をimportしている → ❌ Error
 - `withTransaction()` 内に非DBの非同期処理（メール送信・外部API呼び出し等）がある（`defer()` を提案。opt-in） → 💡 Hint
 - Lv6までの検査はすべて継続する
 <!-- END GENERATED -->
 
 ### 🆕 Lv7で追加されたこと
 
-- `orchestrate-フォルダ`：App層から複数domainをまたぐ調整を切り出す
+- `orchestrate/フォルダ`：App層から複数domainをまたぐ調整を切り出す
 - `defer()`：post-commitフックによる副作用の外出し
 - `logic.test.ts` 必須：テストなしがErrorに昇格
 
@@ -722,19 +903,52 @@ src/
   client/
     client.ts
     adapter.ts
-  domainUser/
+  domains/user/
     routes.ts
     workflow.ts     # 処理後にdomainイベントを返す
     logic.ts
     logic.test.ts
     store.ts
-  domainOrder/
+  domains/order/
     routes.ts
     workflow.ts
     logic.ts
     logic.test.ts
     store.ts
-  orchestrate-*/    # ← Lv8でトランザクション専用に特化
+  orchestrate/*/    # ← Lv8でトランザクション専用に特化
+```
+
+### 構造図
+
+domainのWorkflowがイベントを返し、`app/` のWorkflowが後続へ渡す。`client/` は省略。
+
+```mermaid
+block-beta
+  columns 7
+  corner[" "] h1["① 入口"] h2["② 関門"] h3["③ 変換"] h4["④ 指示"] h5["⑤ 判断"] h6["⑥ 入出力"]
+  Lapp["app/"] route["route.ts<br>集約"] mw["middleware.ts"] space awf["workflow.ts<br>イベントを後続へ渡す"] space space
+  space:7
+  Lorc["orchestrate/xxx/"] space space space owf["workflow.ts<br>トランザクション専用"] space space
+  space:7
+  Ldom["domains/xxx/"] routes["routes.ts"] space parse["parse.ts"] wf["workflow.ts<br>イベントを返す"] logic["logic.ts"] store["store.ts"]
+  space:7
+  Lauth["domains/auth/<br>最上流"] space space space authwf["workflow.ts"] authlogic["logic.ts"] authstore["store.ts"]
+  space:7
+  Lshared["shared/"] space space space events["events.ts<br>イベント型"] space space
+  route --> routes
+  routes --> mw
+  mw --> parse
+  parse --> wf
+  awf --> owf
+  owf --> wf
+  wf --> authwf
+  class Lapp,Lorc,Ldom,Lauth,Lshared lane
+  class awf,owf,wf,events new
+
+  classDef head fill:none,stroke:none,font-weight:bold
+  classDef lane fill:#e8e8e8,stroke:#999,color:#222,font-weight:bold
+  classDef new fill:#ffe9b3,stroke:#c98a00,color:#222
+  class corner,h1,h2,h3,h4,h5,h6 head
 ```
 
 ### レイヤールール
@@ -745,7 +959,7 @@ src/
 - イベントは**過去に起きたことを表す**型：`type` フィールドに大文字スネークケースの定数文字列を使う
 - `payload` フィールドでイベントデータを持つ
 - クラスインスタンス禁止（純粋なデータ型のみ）
-- `shared/events.ts` はdomain / orchestrate- を一切importしない
+- `shared/events.ts` はdomain / orchestrate/ を一切importしない
 
 ```ts
 // shared/events.ts
@@ -767,7 +981,7 @@ export type DomainEvent = UserCreatedEvent | OrderPlacedEvent
 イベントバス（emit/on）は使わない。**domainのworkflowがイベントを戻り値として返す。App層がそれを受け取って後続に渡す。**
 
 ```ts
-// domainUser/workflow.ts — イベントを返す
+// domains/user/workflow.ts — イベントを返す
 export const createUserWorkflow = async (input: ValidatedInput): Promise<UserCreatedEvent> => {
   const user = await saveUser(input)
   return { type: "USER_CREATED", payload: { userId: user.id, email: user.email } }
@@ -786,17 +1000,17 @@ export const CreateUserWorkflow = async (input: CreateUserInput) => {
 
 イベントバスではなく戻り値方式を選ぶ理由：**イベントのルーティングが `app/workflow.ts` を読めば全部わかる**（emit/onは誰がリスナーかコードを追わないと分からない。バックエンドのドメインイベントは「処理されなかった場合はバグ」なので可視性が重要）。
 
-#### orchestrate-フォルダのLv8特化
+#### orchestrate/フォルダのLv8特化
 
-Lv8からorchestrate-はトランザクション専用に特化する。
+Lv8からorchestrate/はトランザクション専用に特化する。
 
 | 処理の性質 | 置き場 |
 |---|---|
 | 失敗してもロールバック不要な副作用（メール・通知・分析） | ドメインイベント + `defer()` |
-| 原子性が必要な複数domain操作（在庫減算と注文作成を同時に） | `orchestrate-` + `withTransaction()` |
+| 原子性が必要な複数domain操作（在庫減算と注文作成を同時に） | `orchestrate/` + `withTransaction()` |
 
 ```ts
-// orchestrate-order-inventory/workflow.ts — トランザクション専用
+// orchestrate/order-inventory/workflow.ts — トランザクション専用
 export const createOrderWithInventory = (input: ValidatedInput) =>
   withTransaction(async () => {
     const placed = await orderDomain.createOrder(input)
@@ -811,12 +1025,12 @@ export const createOrderWithInventory = (input: ValidatedInput) =>
 
 <!-- BEGIN GENERATED: kaachan-checks lv=8 （src/rules-catalog.ts から自動生成。手で編集しない） -->
 - `shared/events.ts` が存在しない → ⚠️ Warning
-- `shared/events.ts` がdomainや `orchestrate-` をimportしている → ❌ Error
+- `shared/events.ts` がdomainや `orchestrate/` をimportしている → ❌ Error
 - イベント型がクラスを含んでいる（純粋なデータ型のみ） → ❌ Error
 - イベント型に `type` フィールド（discriminated union）がない → ⚠️ Warning
 - イベント型の `type` が大文字スネークケースでない → ⚠️ Warning
-- `orchestrate-` フォルダに `withTransaction()` がない（ドメインイベントで代替できるはず） → ⚠️ Warning
-- `orchestrate-` フォルダがメール送信・外部API呼び出し等の非トランザクション処理を含んでいる → ⚠️ Warning
+- `orchestrate/` フォルダに `withTransaction()` がない（ドメインイベントで代替できるはず） → ⚠️ Warning
+- `orchestrate/` フォルダがメール送信・外部API呼び出し等の非トランザクション処理を含んでいる → ⚠️ Warning
 - Lv7までの検査はすべて継続する
 <!-- END GENERATED -->
 
@@ -824,7 +1038,7 @@ export const createOrderWithInventory = (input: ValidatedInput) =>
 
 - `shared/events.ts`：全domainイベント型定義の集中管理
 - ドメインイベントの戻り値方式（イベントバスを使わない）
-- orchestrate-フォルダのトランザクション専用化
+- orchestrate/フォルダのトランザクション専用化
 
 ---
 
@@ -851,21 +1065,54 @@ src/
       prismaAdapter.ts        # UserPortを実装
     order/
       prismaAdapter.ts        # OrderPortを実装
-  domainUser/
+  domains/user/
     routes.ts
     workflow.ts               # Portを引数で受け取る（ORM依存なし）
     ports.ts                  # ← Lv9で追加。domainが必要とするインターフェース定義
     logic.ts
     logic.test.ts
-  domainOrder/
+  domains/order/
     routes.ts
     workflow.ts
     ports.ts
     logic.ts
     logic.test.ts
-  domainAuth/                 # 上流domain（Lv6参照）
+  domains/auth/                 # 上流domain（Lv6参照）
     logic.ts
     ports.ts
+```
+
+### 構造図
+
+domainの入出力が仕様（`ports.ts`）だけになり、実装は `infrastructure/` に移る。`shared/` と `client/` は省略。
+
+```mermaid
+block-beta
+  columns 7
+  corner[" "] h1["① 入口"] h2["② 関門"] h3["③ 変換"] h4["④ 指示"] h5["⑤ 判断"] h6["⑥ 入出力"]
+  Lapp["app/"] route["route.ts<br>集約"] mw["middleware.ts"] space awf["workflow.ts<br>Portを注入"] space space
+  space:7
+  Lorc["orchestrate/xxx/"] space space space owf["workflow.ts"] space space
+  space:7
+  Ldom["domains/xxx/"] routes["routes.ts"] space parse["parse.ts"] wf["workflow.ts<br>Portを引数で受け取る"] logic["logic.ts"] ports["ports.ts<br>仕様だけ"]
+  space:7
+  Linfra["infrastructure/"] space space space space space adapter["xxx/prismaAdapter.ts<br>ports.ts を実装"]
+  space:7
+  Lauth["domains/auth/<br>最上流"] space space space authwf["workflow.ts"] authlogic["logic.ts"] authports["ports.ts"]
+  route --> routes
+  routes --> mw
+  mw --> parse
+  parse --> wf
+  awf --> owf
+  owf --> wf
+  wf --> authwf
+  class Lapp,Lorc,Ldom,Linfra,Lauth lane
+  class awf,wf,ports,adapter,authports new
+
+  classDef head fill:none,stroke:none,font-weight:bold
+  classDef lane fill:#e8e8e8,stroke:#999,color:#222,font-weight:bold
+  classDef new fill:#ffe9b3,stroke:#c98a00,color:#222
+  class corner,h1,h2,h3,h4,h5,h6 head
 ```
 
 > **注意：** `store.ts` はLv9で消滅する。「仕様（ports.ts）」と「実装（infrastructure/*/prismaAdapter.ts）」に分離され、`store` という語はコードベースから消える。
@@ -878,7 +1125,7 @@ src/
 - 「domainはこういう関数が必要だ」という宣言
 
 ```ts
-// domainUser/ports.ts
+// domains/user/ports.ts
 export type UserPort = {
   findByEmail: (email: string) => Promise<User | null>
   findById: (id: string) => Promise<User | null>
@@ -895,7 +1142,7 @@ export type UserPort = {
 
 ```ts
 // infrastructure/user/prismaAdapter.ts
-import { UserPort } from '../../domainUser/ports'
+import { UserPort } from '../../domains/user/ports'
 
 export const prismaUserPort: UserPort = {
   findByEmail: (email) => prisma.user.findUnique({ where: { email } })
@@ -911,7 +1158,7 @@ export const prismaUserPort: UserPort = {
 DIコンテナもclassも使わない。Portを引数で受け取る関数として実装する。
 
 ```ts
-// domainUser/workflow.ts
+// domains/user/workflow.ts
 export const createUserWorkflow =
   (port: UserPort) =>           // Portを引数で受け取る
   async (input: ValidatedInput): Promise<Result<UserCreatedEvent, UserErrorCode>> => {
@@ -923,7 +1170,7 @@ export const createUserWorkflow =
   }
 
 // app/workflow.ts — infrastructureをdomainに注入する合成ルート
-import { createUserWorkflow } from '../domainUser/workflow'
+import { createUserWorkflow } from '../domains/user/workflow'
 import { prismaUserPort } from '../infrastructure/user/prismaAdapter'
 
 export const CreateUserWorkflow = createUserWorkflow(prismaUserPort)
@@ -932,11 +1179,11 @@ export const CreateUserWorkflow = createUserWorkflow(prismaUserPort)
 #### 依存方向
 
 ```
-domainXxx/workflow.ts  →  domainXxx/ports.ts（インターフェースに依存）    ✅
-infrastructure/*/      →  domainXxx/ports.ts（インターフェースを実装）    ✅
+domains/xxx/workflow.ts  →  domains/xxx/ports.ts（インターフェースに依存）    ✅
+infrastructure/*/      →  domains/xxx/ports.ts（インターフェースを実装）    ✅
 app/workflow.ts        →  infrastructure/*/ （具体実装を注入）             ✅
-domainXxx/workflow.ts  →  infrastructure/*/ （実装を知ってはいけない）     ❌
-infrastructure/*/      →  domainXxx/workflow.ts                            ❌
+domains/xxx/workflow.ts  →  infrastructure/*/ （実装を知ってはいけない）     ❌
+infrastructure/*/      →  domains/xxx/workflow.ts                            ❌
 ```
 
 ### Kaachanが検査する項目
@@ -988,7 +1235,7 @@ src/
       queryAdapter.ts
     external/
       stripeAdapter.ts
-  domainUser/
+  domains/user/
     command/                  # ← Lv10で追加。書き込み側
       workflow.ts
       ports.ts                # UserWritePort
@@ -998,7 +1245,7 @@ src/
       workflow.ts
       ports.ts                # UserReadPort
     routes.ts                 # command/queryの両workflowを束ねる
-  domainOrder/
+  domains/order/
     command/
       workflow.ts
       ports.ts
@@ -1008,9 +1255,40 @@ src/
       workflow.ts
       ports.ts
     routes.ts
-  domainAuth/                 # 上流domain（Lv6参照）
+  domains/auth/                 # 上流domain（Lv6参照）
     logic.ts
     ports.ts
+```
+
+### 構造図
+
+domainが書き込み（`command/`）と読み取り（`query/`）の2行に分かれる。`orchestrate/`・`domains/auth/`・`shared/`・`client/` はLv9と同じなので省略。
+
+```mermaid
+block-beta
+  columns 7
+  corner[" "] h1["① 入口"] h2["② 関門"] h3["③ 変換"] h4["④ 指示"] h5["⑤ 判断"] h6["⑥ 入出力"]
+  Lapp["app/"] route["route.ts<br>集約"] mw["middleware.ts"] space awf["workflow.ts<br>Portを注入"] space space
+  space:7
+  Ldom["domains/xxx/"] routes["routes.ts"] space parse["parse.ts"] space space space
+  space:7
+  Lcmd["domains/xxx/<br>command/"] space space space cwf["workflow.ts<br>書き込み"] clogic["logic.ts"] cports["ports.ts<br>WritePort"]
+  space:7
+  Lqry["domains/xxx/<br>query/"] space space space qwf["workflow.ts<br>読み取り"] space qports["ports.ts<br>ReadPort"]
+  space:7
+  Linfra["infrastructure/"] space space space space space adapters["commandAdapter.ts<br>queryAdapter.ts"]
+  route --> routes
+  routes --> mw
+  mw --> parse
+  parse --> cwf
+  parse --> qwf
+  class Lapp,Ldom,Lcmd,Lqry,Linfra lane
+  class Lcmd,Lqry,cwf,clogic,cports,qwf,qports,adapters new
+
+  classDef head fill:none,stroke:none,font-weight:bold
+  classDef lane fill:#e8e8e8,stroke:#999,color:#222,font-weight:bold
+  classDef new fill:#ffe9b3,stroke:#c98a00,color:#222
+  class corner,h1,h2,h3,h4,h5,h6 head
 ```
 
 ### レイヤールール
@@ -1044,7 +1322,7 @@ src/
 HTTPメソッドが自然にCQRSに対応する：
 
 ```ts
-// domainUser/routes.ts
+// domains/user/routes.ts
 export const userRoutes = (r: Router) => {
   // Query側
   r.get('/users',        slime.auth(), json(GetUserListWorkflow))
@@ -1105,9 +1383,9 @@ export const userQueryAdapter: UserReadPort = {
 | 3 | + `parse.ts` | Parse, don't validate |
 | 4 | + `store.ts` `client.ts` | レイヤードアーキテクチャ・ORM隠蔽・腐敗防止層 |
 | 5 | + `logic.ts` | Functional Core（Result型・純粋関数・ドメインprefix） |
-| 6 | `app/` `shared/` `client/` `domainXxx/` | ドメイン分割・store命名がError化 |
-| 7 | + `orchestrate-*/` + `logic.test.ts` + `defer()` | ドメイン横断の調整を構造化・テスト義務化・post-commitフック |
-| 8 | + `shared/events.ts` | ドメインイベント（戻り値方式）・orchestrate-のトランザクション専用化 |
+| 6 | `app/` `shared/` `client/` `domains/xxx/` | ドメイン分割・store命名がError化 |
+| 7 | + `orchestrate/*/` + `logic.test.ts` + `defer()` | ドメイン横断の調整を構造化・テスト義務化・post-commitフック |
+| 8 | + `shared/events.ts` | ドメインイベント（戻り値方式）・orchestrate/のトランザクション専用化 |
 | 9 | + `ports.ts` + `infrastructure/` | Ports & Adapters・store.ts消滅・関数型DI |
 | 10 | `command/` `query/` | CQRS・読み書きの構造的分離 |
 
@@ -1144,10 +1422,11 @@ export const userQueryAdapter: UserReadPort = {
 | `logic-size-warning` | `logic.ts` が500行を超えている、prefixが混在している、または型依存が交差しない関数群がある | — | — | — | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
 | `logic-folder-file-too-large` | `logic/` 内のファイルが300行を超えている、またはprefixの混在が解消されていない | — | — | — | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | `workflow-throws-domain-error` | workflow が `DomainError` を投げている（Lv5以降は `err()` でrouteまで返す） | — | — | — | 💡 | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
+| `folder-name-not-kebab-case` | `domains/`・`orchestrate/` 直下のフォルダ名がkebab-caseでない | — | — | — | — | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
 | `domain-undeclared-import` | 依存宣言にないdomain間のimport | — | — | — | — | ❌ | ❌ | ❌ | ❌ | ❌ |
 | `domain-dependency-cycle` | domain間の依存宣言に循環がある | — | — | — | — | ❌ | ❌ | ❌ | ❌ | ❌ |
 | `client-direct-import` | `client/client.ts` を直接importしている（`client/adapter.ts` を経由していない） | — | — | — | — | ❌ | ❌ | ❌ | ❌ | ❌ |
-| `error-code-missing-prefix` | domainのエラーコードにdomain名の接頭辞がない（`domainUser` なら `USER_*`） | — | — | — | — | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
+| `error-code-missing-prefix` | domainのエラーコードにdomain名の接頭辞がない（`domains/user` なら `USER_*`） | — | — | — | — | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
 | `shared-imports-domain` | `shared/` がdomainフォルダをimportしている | — | — | — | — | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
 | `shared-side-effects` | `shared/utility.ts` / `shared/smallLogic.ts` に副作用がある | — | — | — | — | ❌ | ❌ | ❌ | ❌ | ❌ |
 | `shared-size` | `shared/` のファイルが肥大化している | — | — | — | — | ⚠️ | ❌ | ❌ | ❌ | ❌ |
@@ -1155,23 +1434,23 @@ export const userQueryAdapter: UserReadPort = {
 | `app-owns-store` | `app/store.ts` が存在する（App層はDBアクセスを持たない） | — | — | — | — | ⚠️ | ❌ | ❌ | ❌ | ❌ |
 | `app-owns-client` | `app/client.ts` が存在する（`client/` へ移動する） | — | — | — | — | ❌ | ❌ | ❌ | ❌ | ❌ |
 | `app-owns-logic` | App層がlogicを持っている（`app/logic.ts` またはビジネス判断の混在） | — | — | — | — | ⚠️ | ❌ | ❌ | ❌ | ❌ |
-| `app-route-defines-routes` | `app/route.ts` にルート定義がある（`domainXxx/routes.ts` へ移動する） | — | — | — | — | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
+| `app-route-defines-routes` | `app/route.ts` にルート定義がある（`domains/xxx/routes.ts` へ移動する） | — | — | — | — | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
 | `app-route-size` | `app/route.ts` が肥大化している | — | — | — | — | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
 | `route-dead-target` | ルート定義が存在しないWorkflowファイルを参照している（死んだルート候補） | — | — | — | — | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
 | `workflow-unreachable` | どのルートからも参照されていないWorkflowがある（到達不能Workflow候補） | — | — | — | — | 💡 | 💡 | 💡 | 💡 | 💡 |
 | `domain-missing-routes` | domainフォルダに `routes.ts` がない | — | — | — | — | 💡 | 💡 | 💡 | 💡 | 💡 |
 | `route-sunset-passed` | `sunset` 日付を過ぎたルートが残っている | — | — | — | — | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
-| `domain-imports-orchestrate` | domainが `orchestrate-` フォルダをimportしている | — | — | — | — | — | ❌ | ❌ | ❌ | ❌ |
-| `orchestrate-imports-orchestrate` | `orchestrate-` フォルダ同士がimportし合っている | — | — | — | — | — | ❌ | ❌ | ❌ | ❌ |
-| `orchestrate-imports-app` | `orchestrate-` フォルダが `app/` をimportしている | — | — | — | — | — | ❌ | ❌ | ❌ | ❌ |
+| `domain-imports-orchestrate` | domainが `orchestrate/` フォルダをimportしている | — | — | — | — | — | ❌ | ❌ | ❌ | ❌ |
+| `orchestrate-imports-orchestrate` | `orchestrate/` フォルダ同士がimportし合っている | — | — | — | — | — | ❌ | ❌ | ❌ | ❌ |
+| `orchestrate-imports-app` | `orchestrate/` フォルダが `app/` をimportしている | — | — | — | — | — | ❌ | ❌ | ❌ | ❌ |
 | `defer-suggestion` | `withTransaction()` 内に非DBの非同期処理（メール送信・外部API呼び出し等）がある（`defer()` を提案。opt-in） | — | — | — | — | — | 💡 | 💡 | 💡 | 💡 |
 | `events-file-missing` | `shared/events.ts` が存在しない | — | — | — | — | — | — | ⚠️ | ⚠️ | ⚠️ |
-| `events-imports-domain` | `shared/events.ts` がdomainや `orchestrate-` をimportしている | — | — | — | — | — | — | ❌ | ❌ | ❌ |
+| `events-imports-domain` | `shared/events.ts` がdomainや `orchestrate/` をimportしている | — | — | — | — | — | — | ❌ | ❌ | ❌ |
 | `event-class-type` | イベント型がクラスを含んでいる（純粋なデータ型のみ） | — | — | — | — | — | — | ❌ | ❌ | ❌ |
 | `event-missing-type-field` | イベント型に `type` フィールド（discriminated union）がない | — | — | — | — | — | — | ⚠️ | ⚠️ | ⚠️ |
 | `event-type-not-upper-snake` | イベント型の `type` が大文字スネークケースでない | — | — | — | — | — | — | ⚠️ | ⚠️ | ⚠️ |
-| `orchestrate-without-transaction` | `orchestrate-` フォルダに `withTransaction()` がない（ドメインイベントで代替できるはず） | — | — | — | — | — | — | ⚠️ | ⚠️ | ⚠️ |
-| `orchestrate-non-transactional-io` | `orchestrate-` フォルダがメール送信・外部API呼び出し等の非トランザクション処理を含んでいる | — | — | — | — | — | — | ⚠️ | ⚠️ | ⚠️ |
+| `orchestrate-without-transaction` | `orchestrate/` フォルダに `withTransaction()` がない（ドメインイベントで代替できるはず） | — | — | — | — | — | — | ⚠️ | ⚠️ | ⚠️ |
+| `orchestrate-non-transactional-io` | `orchestrate/` フォルダがメール送信・外部API呼び出し等の非トランザクション処理を含んでいる | — | — | — | — | — | — | ⚠️ | ⚠️ | ⚠️ |
 | `infrastructure-missing` | `infrastructure/` フォルダが存在しない | — | — | — | — | — | — | — | ⚠️ | ⚠️ |
 | `domain-imports-infrastructure` | domainフォルダが `infrastructure/` を直接importしている | — | — | — | — | — | — | — | ❌ | ❌ |
 | `orm-outside-infrastructure` | ORM/DBモジュールのimportが `infrastructure/` 以外にある | — | — | — | — | — | — | — | ❌ | ❌ |

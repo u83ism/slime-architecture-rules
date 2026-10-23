@@ -25,8 +25,8 @@ https://qiita.com/u83unlimited/items/8b0e5b51749ccdfde393
 | 4 | `Workflow` → `Store`(query*/command*命名) / `Client` | **レイヤードアーキテクチャ**の確立。Query/Command命名規則でCQRS的な読み書き意識の芽を植える |
 | 5 | + `Logic`（純粋関数・Result型） | **Decision Objectパターン**の導入。Result型（Railway Oriented Programming）で例外を排除し、ビジネス判断を副作用なし関数に閉じ込める。**Functional Core, Imperative Shell**（Gary Bernhardt）の萌芽 ── Logicが純粋なコア、Workflowが命令型のシェルになる構造が始まる |
 | 6 | `App` / `Domain(s)` / `Shared` / `Client`(+`Adapter`) | **ドメイン駆動設計（DDD）** 本格導入。腐敗防止層（ACL）によるclient/adapter分離。ドメイン間の依存はDAGとして宣言 |
-| 7 | + `orchestrate-` / Logicテスト義務化 | ドメイン間調整を`orchestrate-`フォルダとして構造化。post-commitフックによる副作用の外出し |
-| 8 | + `shared/events.ts` / `orchestrate-`がTx専用化 | **ドメインイベント**（DDD）の導入。副作用（失敗許容）とトランザクション（原子性必須）を構造で分離。戻り値方式でイベントの可視性を保証 |
+| 7 | + `orchestrate/` / Logicテスト義務化 | ドメイン間調整を`orchestrate/`フォルダとして構造化。post-commitフックによる副作用の外出し |
+| 8 | + `shared/events.ts` / `orchestrate/`がTx専用化 | **ドメインイベント**（DDD）の導入。副作用（失敗許容）とトランザクション（原子性必須）を構造で分離。戻り値方式でイベントの可視性を保証 |
 | 9 | + `Domain/ports.ts` / `infrastructure/Adapters` | **ヘキサゴナルアーキテクチャ（Ports & Adapters）** の関数型実装。DIコンテナ・class不要で依存逆転（DIP）を実現。domainからORMへの直接依存が消える。Lv5から始まった**Functional Core, Imperative Shell**が構造として完成。**関数型クリーンアーキテクチャの完成** |
 | 10 | `Domain/command/` + `Domain/query/` + `Infrastructure` | **CQRS**（Greg Young型）の軽量導入。読み書きモデルをフォルダ構造で分離。CAとは独立した別軸のパターンをPorts & Adapters上に統合した**本ドキュメントのゴールの完成形** |
 
@@ -341,9 +341,9 @@ domain間の参照は、設定ファイルで依存の向きを宣言した場�
 // slime.config.ts
 export default {
   domains: {
-    domainAuth: [],                            // 最上流：どのドメインにも依存しない
-    domainUser: ['domainAuth'],
-    domainOrder: ['domainAuth', 'domainUser'],
+    auth: [],                            // 最上流：どのドメインにも依存しない
+    user: ['auth'],
+    order: ['auth', 'user'],
   },
 }
 ```
@@ -369,7 +369,7 @@ export default {
   - app/store.ts は置かない
   - app/client.ts は置かない（client/フォルダへ移動）
   - **app/route.ts はエントリーポイントのみ**（domainルートをimportして束ねる）
-  - ルート定義・ミドルウェア・URLパターンは domain/*/routes.ts に移動する
+  - ルート定義・ミドルウェア・URLパターンは domains/*/routes.ts に移動する
 - Shared
   - 各domainから参照可
   - `utility.ts` / `smallLogic.ts` は純粋関数のみ（副作用禁止）
@@ -409,18 +409,18 @@ export default {
  │    ├─ client.ts        # 外部データアクセスロジック
  │    └─ adapter.ts       # 調節用ロジック/腐敗防止層/こちらのドメインとのマッピングロジック
  │
- ├─ domainA/              # ドメインAの専用Logic
+ ├─ domains/a/              # ドメインAの専用Logic
  │    ├─ routes.ts        # ← Lv6で追加（URLパターン・ミドルウェア・Workflowの対応）
  │    ├─ workflow.ts      # ドメインAのWorkflow
  │    ├─ logic.ts         # ドメインAのビジネスロジック
  │    └─ store.ts         # ドメインAのDBアクセス層
  │
- ├─ domainB/              # ドメインBの専用Logic
+ ├─ domains/b/              # ドメインBの専用Logic
  │    ├─ routes.ts
  │    ├─ workflow.ts
  │    └─ logic.ts
  │
- └─ domainC/...           # 追加ドメインは同様
+ └─ domains/c/...           # 追加ドメインは同様
 ```
 
 
@@ -428,9 +428,9 @@ export default {
 Lv7は正直Lv6の延長戦だと思っていて、メインの課題は **「ビジネスロジック≒ドメインの肥大化をどう整理すべきか」** になる。
 
 - **各logic.tsに対してテストがない場合、エラー扱い**にします。
-- 全ドメインにアクセスできるAppが肥大化することが想定されるので、`orchestrate-`というprefixを付けたフォルダを作成すると、そこからも複数ドメインにアクセスできるようにする
-  - `orchestrate-`フォルダからAppの参照は禁止。ドメインから`orchestrate-`の参照も禁止（調整役はドメインの上に立つ）
-  - 旧版では`cross-`と呼んでいた。この名前に「ドメインの上に立つ調整役」と「ドメインの下に敷く土台（認証等）」の2つの意味が混在していたため、土台はLv6の最上流ドメインに吸収し、調整役を`orchestrate-`とした
+- 全ドメインにアクセスできるAppが肥大化することが想定されるので、`orchestrate/`というprefixを付けたフォルダを作成すると、そこからも複数ドメインにアクセスできるようにする
+  - `orchestrate/`フォルダからAppの参照は禁止。ドメインから`orchestrate/`の参照も禁止（調整役はドメインの上に立つ）
+  - 旧版では`cross-`と呼んでいた。この名前に「ドメインの上に立つ調整役」と「ドメインの下に敷く土台（認証等）」の2つの意味が混在していたため、土台はLv6の最上流ドメインに吸収し、調整役を`orchestrate/`とした
 - **post-commitフック**を導入。トランザクション内で `defer()` を呼ぶと**コミット成功後**に実行されるhookとして動作し、トランザクションのロック時間を最小化する。トランザクション外で呼ぶと**メイン処理完了後**に in-process で即実行するpost-operationフックとして動作する（単一テーブルへの書き込み等、トランザクション不要なケースでの軽量副作用に使う）。重い処理は Queue（別プロセス）に任せる。
 
 ### アーキテクチャルール
@@ -440,8 +440,8 @@ Lv7は正直Lv6の延長戦だと思っていて、メインの課題は **「�
 - Shared
   - 肥大化しない
 - domain
-  - `orchestrate-`フォルダを参照しない
-- orchestrate-
+  - `orchestrate/`フォルダを参照しない
+- orchestrate/
   - 複数ドメイン参照可。App参照禁止
 - Logic
   - 対応するlogic.test.tsが存在しない場合はエラー
@@ -488,32 +488,32 @@ export const CreateUserWorkflow = async (input: CreateUserInput) => {
  │    ├─ client.ts
  │    └─ adapter.ts
  │
- ├─ domainUser/
+ ├─ domains/user/
  │    ├─ routes.ts          # userドメインのルート定義（prefixなし。api.tsで付与）
  │    ├─ workflow.ts
  │    ├─ logic.ts
  │    ├─ logic.test.ts      ← Lv7でテスト必須（ないとエラー）
  │    └─ store.ts           # Lv4から継続（query*/command*命名規則はLv6でエラー化済み）
  │
- ├─ domainOrder/
+ ├─ domains/order/
  │    ├─ routes.ts
  │    └─ ...（同様の構造）
  │
- └─ orchestrate-user-order/ ← Lv7で追加（複数ドメイン参照可。App参照禁止）
+ └─ orchestrate/user-order/ ← Lv7で追加（複数ドメイン参照可。App参照禁止）
       └─ workflow.ts
 ```
 
 ## Lv 8
-Lv8では**ドメインイベントを使ってorchestrate-フォルダの特化と副作用の整理**をするよ！
+Lv8では**ドメインイベントを使ってorchestrate/フォルダの特化と副作用の整理**をするよ！
 
-Lv7の`orchestrate-`フォルダは「複数ドメインを直接参照できる場所」として機能してきたけれども、肥大化するにつれて「第二のApp層」になる問題があるんだ。Lv8ではこれを解決するために**ドメインイベント**を導入する。LaravelにもEventがあるけど、あれを使って複数ドメインをまたぐ処理の一部を整理する。
+Lv7の`orchestrate/`フォルダは「複数ドメインを直接参照できる場所」として機能してきたけれども、肥大化するにつれて「第二のApp層」になる問題があるんだ。Lv8ではこれを解決するために**ドメインイベント**を導入する。LaravelにもEventがあるけど、あれを使って複数ドメインをまたぐ処理の一部を整理する。
 具体的なユースケースとしては、**「ユーザー登録後のウェルカムメール送信」「注文確定後のポイント付与」「記事投稿後のフォロワー通知」** といったケースだ。共通しているのは「**本体の処理が成功した後に発生する副作用であり、失敗してもロールバックは不要**」という点。ウェルカムメールが送れなくてもユーザーは登録できているし、ポイント付与が遅延してもそれは別途リカバリできる。
 逆に「注文作成と在庫減算を必ず同時に成功・失敗させたい」というような絶対にDB上の整合性を取らないといけない処理（＝トランザクション貼るような処理）には適用できない。
 
 よって、
 
 - **副作用（トランザクション後・失敗許容）** → ドメインイベント経由
-- **原子性が必要な複数ドメイン操作** → `orchestrate-`フォルダ継続（トランザクション専用に特化）
+- **原子性が必要な複数ドメイン操作** → `orchestrate/`フォルダ継続（トランザクション専用に特化）
 
 という分け方になる。
 
@@ -528,7 +528,7 @@ Lv7の`orchestrate-`フォルダは「複数ドメインを直接参照できる
 - shared/events.ts
   - Eventはオブジェクト型のみ（クラスインスタンス禁止）
   - `type` フィールド（discriminated union）必須
-- orchestrate-フォルダ
+- orchestrate/フォルダ
   - `withTransaction()` を伴わない処理のみで構成されている場合は警告（「これはイベントで書けるはず」）
   - メール送信・外部API呼び出し等の非トランザクション処理を含まない
 
@@ -547,7 +547,7 @@ type OrderPlacedEvent = {
   payload: { orderId: string; userId: string; items: OrderItem[] }
 }
 
-// domainUser/workflow.ts（ドメインはnotificationの存在を知らない）
+// domains/user/workflow.ts（ドメインはnotificationの存在を知らない）
 export const createUserWorkflow = async (input: ValidatedInput): Promise<UserCreatedEvent> => {
   const user = await saveUser(input)
   return { type: "USER_CREATED", payload: { userId: user.id, email: user.email } }
@@ -563,7 +563,7 @@ export const CreateUserWorkflow = async (input: CreateUserInput) => {
   return event.payload
 }
 
-// orchestrate-order-inventory/workflow.ts（原子性が必要な処理はorchestrate-が担当）
+// orchestrate/order-inventory/workflow.ts（原子性が必要な処理はorchestrate/が担当）
 export const createOrderWithInventory = (input: CreateOrderInput) =>
   withTransaction(async () => {
     const placed = await orderDomain.createOrder(input)
@@ -594,18 +594,18 @@ export const createOrderWithInventory = (input: CreateOrderInput) =>
  │
  ├─ client/
  │
- ├─ domainUser/
+ ├─ domains/user/
  │    ├─ routes.ts          # userドメインのルート定義
  │    ├─ workflow.ts
  │    ├─ logic.ts
  │    ├─ logic.test.ts
  │    └─ store.ts            # ORMの実装 + 関数仕様が混在（query*/command*命名規則あり）
  │
- ├─ domainOrder/
+ ├─ domains/order/
  │    ├─ routes.ts
  │    └─ ...（同様の構造）
  │
- └─ orchestrate-*/                ← トランザクション専用に特化（非トランザクション処理は警告）
+ └─ orchestrate/*/                ← トランザクション専用に特化（非トランザクション処理は警告）
 ```
 
 > 💡 **ADR**: [なぜイベントバス（emit/on）ではなく戻り値方式を選んだか](./Kaachan%26Slime%26Slime%20Architecture構想の設計根拠、補足資料.md#adr-lv8なぜイベントバスemitonではなく戻り値方式を選んだか)
@@ -617,7 +617,7 @@ export const createOrderWithInventory = (input: CreateOrderInput) =>
 Lv8でドメインイベントによる副作用の整理ができた。でも実はまだ問題が残っている。**ドメインのWorkflowがDBの実装を直接importしている**んだ。
 
 ```ts
-// Lv8時点の domainUser/workflow.ts
+// Lv8時点の domains/user/workflow.ts
 import { findUserByEmail, saveUser } from "./store"  // ← 中を追うとORMの実装が出てくる
 
 export const createUserWorkflow = async (input: ValidatedInput) => {
@@ -641,7 +641,7 @@ Lv9では **Port** を導入してこれを解決するよ。
 **Port＝ドメインが「こういう関数を持ってきてくれ」と宣言する型定義だ。**
 
 ```ts
-// domainUser/ports.ts
+// domains/user/ports.ts
 type UserPort = {
   findByEmail: (email: string) => Promise<User | null>
   save: (user: NewUser) => Promise<User>
@@ -652,7 +652,7 @@ type UserPort = {
 
 `store.ts` は「ORMを使ってDBにアクセスする実装」と「ドメインが必要とする関数の仕様」が1ファイルに混在していた。Lv9ではこれを2つに分離する：
 
-- **仕様（Port）** → `domainUser/ports.ts` に残る（ORMを知らない）
+- **仕様（Port）** → `domains/user/ports.ts` に残る（ORMを知らない）
 - **実装（Adapter）** → `infrastructure/user/prismaAdapter.ts` に移動する
 
 なお、元の`shared/store.ts` はこのタイミングで `infrastructure/` に発展消滅する。以降、**storeという語はコードベースから消える。**
@@ -663,11 +663,11 @@ type UserPort = {
 
 ```
 Lv9前:
-  domainUser/
+  domains/user/
     store.ts         （ORMの実装 + 関数仕様が混在。query*/command*命名規則あり）
 
 Lv9以降:
-  domainUser/
+  domains/user/
     ports.ts              （関数仕様だけ。ORMを知らない）
   infrastructure/
     user/
@@ -683,7 +683,7 @@ Lv9以降:
 WorkflowはPortを引数で受け取るように変わる：
 
 ```ts
-// domainUser/workflow.ts
+// domains/user/workflow.ts
 export const createUserWorkflow =
   (port: UserPort) =>            // ← Portを引数で受け取る
   async (input: ValidatedInput): Promise<Result<UserCreatedEvent, UserErrorCode>> => {
@@ -709,7 +709,7 @@ App層でPortとWorkflowを繋げる：
 
 ```ts
 // app/workflow.ts
-import { createUserWorkflow } from "../domainUser/workflow"
+import { createUserWorkflow } from "../domains/user/workflow"
 import { prismaUserPort } from "../infrastructure/user/prismaAdapter"
 
 export const CreateUserWorkflow = createUserWorkflow(prismaUserPort)
@@ -766,14 +766,14 @@ ORMをDrizzleや別のものに変えたいなら `infrastructure/user/drizzleAd
  ├─ shared/
  ├─ client/
  │
- ├─ domainUser/
+ ├─ domains/user/
  │    ├─ routes.ts           # userドメインのルート定義
  │    ├─ ports.ts            ← Lv9で追加（仕様だけ・ORM不在）
  │    ├─ workflow.ts         ← Portを引数で受け取るように変更
  │    ├─ logic.ts
  │    └─ （store.tsの実装部分が infrastructure/ へ移動し、仕様部分が ports.ts に）
  │
- ├─ orchestrate-*/
+ ├─ orchestrate/*/
  │
  └─ infrastructure/          ← Lv9で追加（実装だけ）
       ├─ user/
@@ -845,7 +845,7 @@ Lv10ではこの問題を **CQRS（Command Query Responsibility Segregation）�
 - **Query（読み取り）**：ドメイン境界を無視してJOINしてOK。速さ最優先
 
 ```
-書き込み: domainUser → command/ → 集約ルートを通じた更新のみ
+書き込み: domains/user → command/ → 集約ルートを通じた更新のみ
 読み取り: query/ → users JOIN orders JOIN products でも何でもOK
 ```
 
@@ -856,7 +856,7 @@ Lv10ではこの問題を **CQRS（Command Query Responsibility Segregation）�
 Lv9まではdomain内が `ports.ts / workflow.ts / logic.ts` だったが、Lv10でcommand/とquery/に分裂する：
 
 ```
-domainUser/
+domains/user/
   command/                 ← 書き込み系（集約境界を厳守）
     ports.ts               # WritePort（書き込み専用）
     workflow.ts            # 書き込みWorkflow
@@ -892,7 +892,7 @@ domainUser/
  │    ├─ client.ts
  │    └─ adapter.ts
  │
- ├─ domainUser/
+ ├─ domains/user/
  │    ├─ routes.ts          # userドメインのルート定義
  │    ├─ command/           ← 書き込み系（集約境界を厳守）
  │    │    ├─ ports.ts      # WritePort（書き込み専用の仕様）
@@ -904,12 +904,12 @@ domainUser/
  │         ├─ userDetail.ts
  │         └─ userWithOrders.ts    # ordersドメインを越境してもOK
  │
- ├─ domainOrder/
+ ├─ domains/order/
  │    ├─ routes.ts
  │    ├─ command/
  │    └─ query/
  │
- ├─ orchestrate-*/
+ ├─ orchestrate/*/
  │
  └─ infrastructure/
       ├─ user/
@@ -924,7 +924,7 @@ domainUser/
 ### 実際のコードイメージ
 
 ```ts
-// domainUser/query/userWithOrders.ts
+// domains/user/query/userWithOrders.ts
 // ← ordersドメインを越境するクエリ。Lv9まではNGだったがquery/内はOK
 type UserWithOrdersView = {
   userId: string
@@ -953,7 +953,7 @@ export const prismaUserWithOrdersPort: UserWithOrdersPort = {
 書き込み側は変わらず集約ルートを通じた更新のみ：
 
 ```ts
-// domainUser/command/workflow.ts
+// domains/user/command/workflow.ts
 // command側はuser集約の外には直接触れない
 export const createUserWorkflow =
   (port: UserWritePort) =>
