@@ -28,6 +28,7 @@ src/
   domainUser/       # One folder per business domain
     routes.ts       # Route definitions: combines parse and workflow for this domain
     parse.ts        # Input schemas for this domain (moved from app/ at Lv6)
+    errors.ts       # Error codes for this domain (USER_*; types only)
     workflow.ts     # Domain workflow (receives parsed input and the principal)
     logic.ts        # Domain business judgment and calculations
     store.ts        # Domain-specific DB access
@@ -160,24 +161,37 @@ export const chargePayment = async (amount: number): Promise<Result<Receipt, "PA
 
 ## Error Handling
 
-Configure `slime.config.ts` to map domain error codes to HTTP status codes:
+- **Validation failures**: framework returns HTTP 400. **Auth/middleware rejection**: 401, 403, or 429.
+- **Business rejections travel as return values all the way to the route.** Domain `logic.ts` and `client/adapter.ts` return `Result.err(code)`. Workflows (domain, `orchestrate-`, and app) pass it upward with an early `return`. The response wrapper (`json(...)`) maps the code to a 4xx status.
+- **Do not throw business rejections** from workflows — return `err(...)`. `throw` is reserved for technical failures (bugs, DB down, network), which become HTTP 500.
+- Workflows that cannot reject may return a plain value.
+- `withTransaction()` rolls back when its callback returns `err` (as well as when it throws) and commits on `ok`.
+- **Each domain declares its own error codes** in `domainXxx/errors.ts`, prefixed with the domain name (`domainUser` → `USER_*`). Domains know nothing about HTTP status codes.
+- The status map lives outside the domains (`slime.config.ts`) and must cover the union of all domain codes. Use `satisfies Record<DomainErrorCode, number>` so a missing entry is a type error.
+- Error responses use **Problem Details** (RFC 9457, `Content-Type: application/problem+json`) with a `code` extension member. Frontends may `import type` the code union to keep their message tables exhaustive.
 
 ```ts
+// domainUser/errors.ts — codes only, no HTTP knowledge
+export type UserErrorCode = "USER_ALREADY_EXISTS" | "USER_NOT_FOUND"
+
+// slime.config.ts — an HTTP status for every code of every domain
+type DomainErrorCode = UserErrorCode | OrderErrorCode
 export default {
   errors: {
     USER_ALREADY_EXISTS: 409,
-    UNAUTHORIZED: 403,
-    OUT_OF_STOCK: 422,
-    NOT_FOUND: 404,
-    PAYMENT_DECLINED: 402,
-  }
+    USER_NOT_FOUND: 404,
+    ORDER_OUT_OF_STOCK: 422,
+  } satisfies Record<DomainErrorCode, number>,
+}
+
+// domainUser/workflow.ts — rejections are returned, not thrown
+export const createUserWorkflow = async (input: CreateUserInput): Promise<Result<User, UserErrorCode>> => {
+  const exists = await findUserByEmail(input.email)
+  const check = userCanCreate(!!exists)
+  if (!check.ok) return check
+  return ok(await saveUser(input))
 }
 ```
-
-- **Validation failures**: framework maps to HTTP 400.
-- **Auth/middleware rejection**: framework maps to 401, 403, or 429.
-- **Domain errors**: `throw new Error(code)` → framework maps via error config to 4xx.
-- **Unhandled throws**: framework maps to HTTP 500.
 
 ---
 
@@ -213,11 +227,14 @@ Severity: 💡 Hint = information, ⚠️ Warning = likely problem, ❌ Error = 
 - ⚠️ Warning — `workflow.ts` exceeds ~500 lines
 - ⚠️ Warning — A workflow touches HTTP request, response, or context objects
 - ⚠️ Warning — A workflow parses raw input directly (e.g., `JSON.parse()`)
+- ⚠️ Warning — A workflow throws a plain `Error` (a business rejection would become HTTP 500; use `DomainError` at Lv3–4 and `err()` from Lv5)
 - ⚠️ Warning — `parse.ts` exceeds ~500 lines (split into `parse/`)
 - ⚠️ Warning — A workflow calls an ORM-specific transaction API directly (use `withTransaction()`)
 - ⚠️ Warning — A logic function has no domain prefix (`userCan*`, etc.)
 - ⚠️ Warning — logic has no corresponding test file (`logic.test.ts`)
 - ⚠️ Warning — `logic.ts` exceeds ~500 lines, mixes domain prefixes, or contains function groups whose type dependencies do not intersect
+- ⚠️ Warning — A workflow throws a `DomainError` (from Lv5, return `err()` up to the route instead)
+- ⚠️ Warning — A domain error code lacks the domain prefix (`domainUser` → `USER_*`)
 - ⚠️ Warning — `shared/` imports from a domain folder
 - ⚠️ Warning — A file in `shared/` is too large
 - ⚠️ Warning — The App layer is too large
@@ -230,9 +247,9 @@ Severity: 💡 Hint = information, ⚠️ Warning = likely problem, ❌ Error = 
 - 💡 Hint — API routes are defined outside an `/api` group
 - 💡 Hint — `workflow.ts` exceeds ~300 lines or ~10 functions
 - 💡 Hint — A workflow calls a parse function (parsing belongs in route)
+- 💡 Hint — `slime.config.ts` is missing (it maps error codes to HTTP status codes)
 - 💡 Hint — `parse.ts` exceeds ~300 lines or ~10 functions (shared schemas are allowed)
 - 💡 Hint — `logic.ts` exceeds ~300 lines or ~10 functions (consider splitting into `logic/`)
-- 💡 Hint — `slime.config.ts` is missing (it maps domain error codes to HTTP status codes)
 - 💡 Hint — A workflow is not referenced by any route (unreachable workflow candidate)
 - 💡 Hint — A domain folder has no `routes.ts`
 <!-- END GENERATED -->

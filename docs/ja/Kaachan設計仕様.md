@@ -77,25 +77,26 @@ parse/
 | **DomainError** | LogicのResult err / 業務的な拒否（ビジネスルール違反） | 4xx |
 | **TechnicalError** | 未捕捉throw / DB障害等（技術的障害） | 500 |
 
-`slime.config.ts` にDomainErrorの文字列→HTTPコードのマップを一元定義。マップに登録されていないthrowはすべてTechnicalError（500）として扱う：
+エラーコードは型として宣言し（Lv3〜5は `errors.ts`、Lv6以降は `domainXxx/errors.ts`）、HTTPステータスとの対応表は `slime.config.ts` に置く。対応表は `satisfies Record<DomainErrorCode, number>` で全コードの登録を型で強制する。
 
 ```ts
 // slime.config.ts
 export default {
   errors: {
-    // DomainError = LogicのResult errで使う文字列 → 4xx
     USER_ALREADY_EXISTS: 409,
-    UNAUTHORIZED: 403,
     OUT_OF_STOCK: 422,
-    NOT_FOUND: 404,
-    // 上記マップにないthrow → 自動的に500（TechnicalError）
-  }
+  } satisfies Record<DomainErrorCode, number>,
 }
 ```
 
-Slimeが自動カバーする範囲：Parse失敗→400 / Middleware拒否→401/403/429 / 未捕捉throw→500。ユーザーがマップに登録するのはLogicのResult errの文字列のみ。LogicはHTTPを一切知らなくて済む。
+| Lv | 業務上の拒否の表し方 |
+|---|---|
+| Lv3〜4 | workflowが型つきの `DomainError` を投げる |
+| Lv5〜 | LogicとclientのResult errを、workflowが早期returnでrouteまで返す |
 
-**導入タイミング：** Lv5（Logic導入と同時）。Kaachanは `new Error()` 直throwに対してwarningを出し、Result err + エラー文字列のマップ登録を促す。
+Slimeが自動カバーする範囲：Parse失敗→400 / Middleware拒否→401/403/429 / 業務上の拒否→対応表の4xx / 未捕捉throw→500。エラー応答はProblem Details（RFC 9457）形式で、拡張メンバー `code` にエラーコードを入れる。LogicとドメインはHTTPを一切知らなくて済む。
+
+**Kaachanの検査：** workflowが素の `Error` を投げていたら警告する（業務上の拒否なら500になってしまうため）。Lv5以降は `DomainError` のthrowにも、`err()` で返すよう指摘する。重大度は `src/rules-catalog.ts` を参照。
 
 ---
 

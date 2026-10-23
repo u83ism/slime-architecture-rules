@@ -101,6 +101,22 @@ export const RULE_CATALOG: readonly RuleDefinition[] = [
     severity: [[3, "warning"]],
   },
   {
+    id: "workflow-throws-plain-error",
+    summary: {
+      ja: "workflow が素の `Error` を投げている（業務上の拒否なら500になる。Lv3〜4は `DomainError`、Lv5以降は `err()` を使う）",
+      en: "A workflow throws a plain `Error` (a business rejection would become HTTP 500; use `DomainError` at Lv3–4 and `err()` from Lv5)",
+    },
+    severity: [[3, "warning"]],
+  },
+  {
+    id: "slime-config-missing",
+    summary: {
+      ja: "`slime.config.ts` がない（エラーコードとHTTPステータスの対応表を置く）",
+      en: "`slime.config.ts` is missing (it maps error codes to HTTP status codes)",
+    },
+    severity: [[3, "hint"]],
+  },
+  {
     id: "parse-size-hint",
     summary: {
       ja: "`parse.ts` が300行 / 10関数を超えている（共通スキーマは許容）",
@@ -217,12 +233,12 @@ export const RULE_CATALOG: readonly RuleDefinition[] = [
     severity: [[5, "error"]],
   },
   {
-    id: "slime-config-missing",
+    id: "workflow-throws-domain-error",
     summary: {
-      ja: "`slime.config.ts` がない（DomainErrorとHTTPステータスの対応表を置く）",
-      en: "`slime.config.ts` is missing (it maps domain error codes to HTTP status codes)",
+      ja: "workflow が `DomainError` を投げている（Lv5以降は `err()` でrouteまで返す）",
+      en: "A workflow throws a `DomainError` (from Lv5, return `err()` up to the route instead)",
     },
-    severity: [[5, "hint"]],
+    severity: [[5, "hint"], [6, "warning"]],
   },
 
   // ---- Lv6: domain folders ----
@@ -249,6 +265,14 @@ export const RULE_CATALOG: readonly RuleDefinition[] = [
       en: "`client/client.ts` is imported directly (bypassing `client/adapter.ts`)",
     },
     severity: [[6, "error"]],
+  },
+  {
+    id: "error-code-missing-prefix",
+    summary: {
+      ja: "domainのエラーコードにdomain名の接頭辞がない（`domainUser` なら `USER_*`）",
+      en: "A domain error code lacks the domain prefix (`domainUser` → `USER_*`)",
+    },
+    severity: [[6, "warning"]],
   },
   {
     id: "shared-imports-domain",

@@ -13,6 +13,7 @@ src/
   middleware.ts   # Authentication, rate limiting, CORS, etc.
   workflow.ts     # Request orchestration (calls parse → store/client → response)
   parse.ts        # Request validation and transformation
+  errors.ts       # Error codes this app can return (types only)
   store.ts        # All DB reads and writes
   client.ts       # All external API calls
 ```
@@ -150,10 +151,33 @@ if (e.code === 'card_declined' && user.retryCount > 3) return err("CARD_BLOCKED"
 
 ## Error Handling
 
-- **Validation failures** (`parse.ts` throws): framework maps to HTTP 400.
-- **Auth/middleware rejection**: framework maps to 401, 403, or 429.
-- **Domain errors from client** (`Result.err`): workflow converts to `throw new Error(errorCode)` → framework maps via `slime.config.ts` error map to 4xx.
-- **Unhandled throws**: framework maps to HTTP 500.
+- **Validation failures** (`parse.ts` throws): framework returns HTTP 400.
+- **Auth/middleware rejection**: framework returns 401, 403, or 429.
+- **Business rejections** (e.g., "this email is already registered"): throw a typed `DomainError` with a code declared in `errors.ts`. The response wrapper maps the code to a 4xx status.
+- **Business rejections from external APIs**: `client.ts` returns `Result.err(code)` (e.g., `PAYMENT_DECLINED`). Until Lv5, the workflow throws it as a `DomainError`.
+- **Unhandled throws** (bugs, DB down, network failure): framework returns HTTP 500. Never use a plain `Error` for a business rejection — it becomes a 500.
+- Every error code needs an HTTP status in the status map. Use `satisfies Record<DomainErrorCode, number>` so a missing entry is a type error.
+- Error responses use **Problem Details** (RFC 9457, `Content-Type: application/problem+json`) with a `code` extension member.
+
+```ts
+// errors.ts — the error codes this app can return
+export type DomainErrorCode = "USER_ALREADY_EXISTS" | "PAYMENT_DECLINED"
+
+// slime.config.ts — an HTTP status for every code
+export default {
+  errors: {
+    USER_ALREADY_EXISTS: 409,
+    PAYMENT_DECLINED: 402,
+  } satisfies Record<DomainErrorCode, number>,
+}
+
+// workflow.ts
+const payment = await chargePayment(amount)                // client returns Result
+if (!payment.ok) throw new DomainError(payment.error)      // OK until Lv5
+if (exists) throw new Error("USER_ALREADY_EXISTS")         // NG — a plain Error becomes 500
+```
+
+From Lv5, business rejections are returned as `Result.err` instead of thrown.
 
 ---
 
@@ -178,12 +202,14 @@ Severity: 💡 Hint = information, ⚠️ Warning = likely problem, ❌ Error = 
 - ⚠️ Warning — `workflow.ts` exceeds ~500 lines
 - ⚠️ Warning — A workflow touches HTTP request, response, or context objects
 - ⚠️ Warning — A workflow parses raw input directly (e.g., `JSON.parse()`)
+- ⚠️ Warning — A workflow throws a plain `Error` (a business rejection would become HTTP 500; use `DomainError` at Lv3–4 and `err()` from Lv5)
 - ⚠️ Warning — `parse.ts` exceeds ~500 lines (split into `parse/`)
 - ⚠️ Warning — A workflow calls an ORM-specific transaction API directly (use `withTransaction()`)
 - ⚠️ Warning — A store function returns an ORM type
 - 💡 Hint — API routes are defined outside an `/api` group
 - 💡 Hint — `workflow.ts` exceeds ~300 lines or ~10 functions
 - 💡 Hint — A workflow calls a parse function (parsing belongs in route)
+- 💡 Hint — `slime.config.ts` is missing (it maps error codes to HTTP status codes)
 - 💡 Hint — `parse.ts` exceeds ~300 lines or ~10 functions (shared schemas are allowed)
 - 💡 Hint — A store function name violates the naming convention (`find*` / `list*` / `get*` / `count*` / `search*` / `create*` / `save*` / `update*` / `delete*` / `remove*`)
 <!-- END GENERATED -->

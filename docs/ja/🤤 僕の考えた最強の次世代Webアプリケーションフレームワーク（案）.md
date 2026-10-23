@@ -187,6 +187,8 @@ route.post('/api', myCustomMiddleware, SomeWorkflow)
 #### Slimeが提供するもの
 - `slime export:schema` - `parse.ts`の型定義からフロントエンド向け型・Zodスキーマを自動生成。「バックエンドのparseを変えたらフロントのビルドが落ちる」という型安全の保証を担う
 - `slime export:openapi` - route定義とparseスキーマからOpenAPI 3.x specを生成。外部チームや外部クライアント向けのAPI仕様書を別途手書き不要に
+- `json(parse, workflow)` 等の応答形式の関数 - parseとWorkflowを組み合わせ、戻り値をJSONで返す。業務上の拒否はエラーコードの対応表を引いてProblem Details（RFC 9457）形式の4xxにする
+- `DomainError` - Lv3〜4で業務上の拒否を表す型つきの例外（Lv5からはResult型で返す）
 
 #### Kaachanのお叱りポイント
 <!-- BEGIN GENERATED: kaachan-checks lv=3 （src/rules-catalog.ts から自動生成。手で編集しない） -->
@@ -195,6 +197,8 @@ route.post('/api', myCustomMiddleware, SomeWorkflow)
 - workflow がHTTPのリクエスト・レスポンス・コンテキストに触れている → ⚠️ Warning
 - workflow がparse関数を呼んでいる（parseはrouteで行う） → 💡 Hint
 - workflow が `JSON.parse()` 等で入力を直接パースしている → ⚠️ Warning
+- workflow が素の `Error` を投げている（業務上の拒否なら500になる。Lv3〜4は `DomainError`、Lv5以降は `err()` を使う） → ⚠️ Warning
+- `slime.config.ts` がない（エラーコードとHTTPステータスの対応表を置く） → 💡 Hint
 - `parse.ts` が300行 / 10関数を超えている（共通スキーマは許容） → 💡 Hint
 - `parse.ts` が500行を超えている（`parse/` への分割を促す） → ⚠️ Warning
 - `parse/` 内のファイルが300行を超えている → ❌ Error
@@ -206,7 +210,7 @@ route.post('/api', myCustomMiddleware, SomeWorkflow)
 ### Lv 4
 
 #### Slimeが提供するもの
-- `slime.withTransaction(async () => { ... })` - 複数Storeをまたぐトランザクションをラップするユーティリティ。ORM固有のトランザクションAPIをWorkflowから隠蔽する
+- `slime.withTransaction(async () => { ... })` - 複数Storeをまたぐトランザクションをラップするユーティリティ。ORM固有のトランザクションAPIをWorkflowから隠蔽する。コールバックがthrowしたときに加え、Lv5以降でResultのerrを返したときもロールバックする
 
 ```ts
 return slime.withTransaction(async () => {
@@ -231,32 +235,29 @@ return slime.withTransaction(async () => {
 
 #### Slimeが提供するもの
 - `ok(value)` / `err(error)` / `Result<T, E>` 型 - Result型のユーティリティ（neverthrow等の外部ライブラリでも代替可）
-- `slime.config.ts` のDomainErrorマッピング - LogicのResult errで使う文字列→HTTPステータスコードのマップを一元定義
+- 応答形式の関数（`json(...)`）のResult対応 - WorkflowがResultを返したら、okは2xx、errは対応表の4xx（Problem Details形式）にする。Lv5以降、業務上の拒否はthrowせずrouteまで戻り値で運ぶ
 
 ```ts
 // slime.config.ts
 export default {
   errors: {
-    // DomainError = LogicのResult errで使う文字列 → 4xx
     USER_ALREADY_EXISTS: 409,
-    UNAUTHORIZED: 403,
     OUT_OF_STOCK: 422,
-    NOT_FOUND: 404,
-    // 上記マップにないthrow → 自動的に500（TechnicalError）
-  }
+    PAYMENT_DECLINED: 402,
+  } satisfies Record<DomainErrorCode, number>,  // 全コードの登録を型で強制
 }
 ```
 
-Slimeが自動カバーする範囲：Parse失敗→400 / Middleware拒否→401/403/429 / 未捕捉throw→500。ユーザーがマップに登録するのはLogicのResult errの文字列のみ。LogicはHTTPを一切知らなくて済む。
+Slimeが自動カバーする範囲：Parse失敗→400 / Middleware拒否→401/403/429 / 業務上の拒否→対応表の4xx / 未捕捉throw→500。LogicはHTTPを一切知らなくて済む。
 
 > **DomainError / TechnicalError の二分類**（[mpywさんの記事](https://zenn.dev/yumemi_inc/articles/ebc6e634fa57a1)の例外設計から着想）
 >
 > | 分類 | 意味 | HTTPコード |
 > |---|---|---|
-> | **DomainError** | LogicのResult err / 業務的な拒否（ビジネスルール違反） | 4xx |
+> | **DomainError** | 業務的な拒否（ビジネスルール違反）。Lv3〜4は `DomainError` のthrow、Lv5以降はResult err | 4xx |
 > | **TechnicalError** | 未捕捉throw / DB障害等（技術的障害） | 500 |
 >
-> マップに登録されていないthrowはすべてTechnicalError（500）として扱う。導入タイミングはLv5（Logic導入と同時）。
+> 業務上の拒否以外のthrowはすべてTechnicalError（500）として扱う。
 
 #### Kaachanのお叱りポイント
 <!-- BEGIN GENERATED: kaachan-checks lv=5 （src/rules-catalog.ts から自動生成。手で編集しない） -->
@@ -267,7 +268,7 @@ Slimeが自動カバーする範囲：Parse失敗→400 / Middleware拒否→401
 - `logic.ts` が300行 / 10関数を超えている（`logic/` への分割を促す） → 💡 Hint
 - `logic.ts` が500行を超えている、prefixが混在している、または型依存が交差しない関数群がある → ⚠️ Warning
 - `logic/` 内のファイルが300行を超えている、またはprefixの混在が解消されていない → ❌ Error
-- `slime.config.ts` がない（DomainErrorとHTTPステータスの対応表を置く） → 💡 Hint
+- workflow が `DomainError` を投げている（Lv5以降は `err()` でrouteまで返す） → 💡 Hint
 - Lv4までの検査はすべて継続する
 <!-- END GENERATED -->
 
@@ -284,9 +285,11 @@ Slimeが自動カバーする範囲：Parse失敗→400 / Middleware拒否→401
 <!-- BEGIN GENERATED: kaachan-checks lv=6 （src/rules-catalog.ts から自動生成。手で編集しない） -->
 - store の関数名が命名規則（`find*` / `list*` / `get*` / `count*` / `search*` / `create*` / `save*` / `update*` / `delete*` / `remove*`）に違反している → ❌ Error（Lv5の💡 Hintから変更）
 - store がORM型を戻り値に使っている → ❌ Error（Lv5の⚠️ Warningから変更）
+- workflow が `DomainError` を投げている（Lv5以降は `err()` でrouteまで返す） → ⚠️ Warning（Lv5の💡 Hintから変更）
 - 依存宣言にないdomain間のimport → ❌ Error
 - domain間の依存宣言に循環がある → ❌ Error
 - `client/client.ts` を直接importしている（`client/adapter.ts` を経由していない） → ❌ Error
+- domainのエラーコードにdomain名の接頭辞がない（`domainUser` なら `USER_*`） → ⚠️ Warning
 - `shared/` がdomainフォルダをimportしている → ⚠️ Warning
 - `shared/utility.ts` / `shared/smallLogic.ts` に副作用がある → ❌ Error
 - `shared/` のファイルが肥大化している → ⚠️ Warning

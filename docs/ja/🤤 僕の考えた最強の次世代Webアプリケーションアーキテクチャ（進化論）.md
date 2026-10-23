@@ -139,6 +139,7 @@ export const CreateUserWorkflow = (input: CreateUserInput) => {
 
 `json(parse, workflow)`は、リクエストをparseに通した入力と、Middlewareが確定したプリンシパルをWorkflowに渡し、戻り値をJSONで返す関数だ（後述の「残課題：フロントエンドの扱い」で出てくる応答形式の関数と同じもの）。おかげでWorkflowはHTTPを知らずに済み、バッチやキューやテストからも同じ形で呼べる。Workflowの引数は入力、プリンシパルの順で、プリンシパルを使わないなら省略できる。
 CookieやリダイレクトのようにHTTP固有の操作がどうしても必要なルートだけは、route.tsに薄いハンドラーを直接書いてよい。ただしそこでやっていいのはHTTPの入出力だけだ。
+WorkflowがHTTPを知らないので、「このメールアドレスは登録済み」のような業務上の拒否は、型つきの`DomainError`を投げて表す。routeがエラーコードの対応表を引いて409等の4xxにしてくれる。素の`Error`を投げると想定外の障害として500になるので注意。
 
 > 💡 **ADR**: [なぜWorkflowはHTTPに依存しない設計になっているか](./Kaachan%26Slime%26Slime%20Architecture構想の設計根拠、補足資料.md#adr-lv3なぜworkflowはhttpに依存しない設計になっているか)
 
@@ -192,7 +193,7 @@ export const sendWelcomeMail = async (email: string) => {
 export const CreateUserWorkflow = async (input: CreateUserInput) => {
   const exists = await findUserByEmail(input.email)
   if (exists) {
-    throw new Error("User already exists")
+    throw new DomainError("USER_ALREADY_EXISTS")  // 業務上の拒否は型つきのDomainErrorで（409になる）
   }
 
   const user = await saveUser(input)
@@ -215,6 +216,7 @@ export const CreateUserWithAuditWorkflow = async (input: CreateUserInput) => {
 いよいよここからLaravelの想定外の、ユーザーランドの経験則/集合知で何とかしている領域に入るよ。
 まずはWorkflowからビジネスロジック(Logic)を分離するんだ。昨今の関数型プログラミングの影響を受けて、**Logicは、状態を持たず、副作用を持たない、純粋なビジネス判断だけを担う層**にするよ！保守性がよくなるからね！
 あともう一つLogicについては制約をつけるよ。ロジックには 成功レール と 失敗レール の2本がある。ok()に乗せたら成功レール、err()に乗せたら失敗レール。Workflowはどっちのレールで返ってきたか確認してから次の処理を決める。**レールから落ちる（throw Error）のは禁止！** これが高レベル帯で効いてくる。
+Workflowも、失敗レールで返ってきた結果をthrowに変えず、そのままrouteまで返す（`return check`）。routeがエラーコードを4xxに変えてくれるので、Lv3〜4で使っていた`DomainError`のthrowはここで卒業だ。
 とまぁここまで来たら当然自動テストも書いてほしいよね、ってことで**Logicは自動テスト必須**。
 
 > **設計理論との接続**：このLogic層は「**Decision Objectパターン**」と呼ばれる設計パターンと同じ概念です。Workflowに条件分岐が増えてきたとき、「ビジネス判断」だけを切り出して専用の関数に移す──それがDecision Objectパターンであり、Slime ArchitectureではLogicがその役割を担います。Result型（ok/err）を使うことで、判断の結果が型として明示され、Workflowは「判断する」のではなく「判断結果に従って動く」という役割分担が自然に生まれます。
@@ -232,17 +234,18 @@ Logic層の最大リスクはドメイン分割（Lv6）前の際限ない肥大
 ### アーキテクチャルール
 - Workflow
   - ビジネス判断（条件分岐）を直書きしない。Logic関数に切り出す
+  - LogicやclientのResult errはthrowに変えず、早期returnでrouteまで返す
   - 一定規模を超えたらLv6への移行を検討する
 - Logic
   - 純粋関数のみ（状態・副作用禁止）
-  - throwはNG。Result型（ok/err）で返す（WorkflowはResultを受け取ってthrow可）
+  - throwはNG。Result型（ok/err）で返す
   - 自動テスト必須
   - **関数名にドメインprefixを必須**（`userCan*`・`orderCan*` 等）
   - 同一ファイルで異なるprefixが混在してきたら `logic/` フォルダへの分割を検討
 
 > 💧 **Kaachan/Slime**: 肥大化の自動検知閾値・エスカレーション（Hint/Warning/Error）・Result型の提供については[FW文書](./🤤%20僕の考えた最強の次世代Webアプリケーションフレームワーク（案）.md#lv-5-1)参照
 >
-> 💡 **ADR**: [なぜ「Logicだけ」Result型なのか（ROPの射程）](./Kaachan%26Slime%26Slime%20Architecture構想の設計根拠、補足資料.md#adr-lv5なぜlogicだけresult型なのかropの射程) / [ResultAsync（チェーン専用型）を採用しない理由](./Kaachan%26Slime%26Slime%20Architecture構想の設計根拠、補足資料.md#adr-lv5resultasyncチェーン専用型を採用しない理由)
+> 💡 **ADR**: [なぜ業務上の拒否だけをResult型で運ぶのか（ROPの射程）](./Kaachan%26Slime%26Slime%20Architecture構想の設計根拠、補足資料.md#adr-lv5なぜ業務上の拒否だけをresult型で運ぶのかropの射程) / [ResultAsync（チェーン専用型）を採用しない理由](./Kaachan%26Slime%26Slime%20Architecture構想の設計根拠、補足資料.md#adr-lv5resultasyncチェーン専用型を採用しない理由)
 
 
 ### 概念コード
@@ -270,7 +273,7 @@ export const CreateUserWorkflow = async (input: CreateUserInput) => {
 
   // 純粋ビジネス判断（Resultで返ってくる）
   const result = userCanCreate(!!exists)
-  if (!result.ok) throw new Error(result.error)  // WorkflowはResultを受け取ってthrow可
+  if (!result.ok) return result  // 失敗レールのままrouteへ返す（throwしない）
 
   // 永続化（副作用）
   const user = await saveUser(input)
@@ -278,7 +281,7 @@ export const CreateUserWorkflow = async (input: CreateUserInput) => {
   // 外部通信（副作用）
   await sendWelcomeMail(user.email)
 
-  return user
+  return ok(user)
 }
 ```
 
@@ -563,9 +566,11 @@ export const CreateUserWorkflow = async (input: CreateUserInput) => {
 // orchestrate-order-inventory/workflow.ts（原子性が必要な処理はorchestrate-が担当）
 export const createOrderWithInventory = (input: CreateOrderInput) =>
   withTransaction(async () => {
-    const event = await orderDomain.createOrder(input)
-    await inventoryDomain.deductStock(event.payload.items)  // 失敗したらロールバック
-    return event
+    const placed = await orderDomain.createOrder(input)
+    if (!placed.ok) return placed                            // errを返すとロールバック
+    const deducted = await inventoryDomain.deductStock(placed.value.payload.items)
+    if (!deducted.ok) return deducted                        // 在庫不足等でもロールバック
+    return placed
   })
 ```
 
@@ -681,11 +686,12 @@ WorkflowはPortを引数で受け取るように変わる：
 // domainUser/workflow.ts
 export const createUserWorkflow =
   (port: UserPort) =>            // ← Portを引数で受け取る
-  async (input: ValidatedInput): Promise<UserCreatedEvent> => {
+  async (input: ValidatedInput): Promise<Result<UserCreatedEvent, UserErrorCode>> => {
     const exists = await port.findByEmail(input.email)
-    canCreateUser(!!exists)
+    const check = userCanCreate(!!exists)
+    if (!check.ok) return check
     const user = await port.save(input)
-    return { type: "USER_CREATED", payload: user }
+    return ok({ type: "USER_CREATED", payload: { userId: user.id, email: user.email } })
   }
 ```
 
@@ -951,11 +957,12 @@ export const prismaUserWithOrdersPort: UserWithOrdersPort = {
 // command側はuser集約の外には直接触れない
 export const createUserWorkflow =
   (port: UserWritePort) =>
-  async (input: ValidatedInput): Promise<UserCreatedEvent> => {
+  async (input: ValidatedInput): Promise<Result<UserCreatedEvent, UserErrorCode>> => {
     const exists = await port.findByEmail(input.email)
-    canCreateUser(!!exists)
+    const check = userCanCreate(!!exists)
+    if (!check.ok) return check
     const user = await port.save(input)
-    return { type: "USER_CREATED", payload: user }
+    return ok({ type: "USER_CREATED", payload: { userId: user.id, email: user.email } })
   }
 ```
 

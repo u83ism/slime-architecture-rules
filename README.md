@@ -64,6 +64,19 @@ LAYER_FILES.STORE       // "store.ts"
 LAYER_FILES.CLIENT      // "client.ts"
 LAYER_FILES.LOGIC       // "logic.ts"
 LAYER_FILES.PORTS       // "ports.ts"
+LAYER_FILES.ERRORS      // "errors.ts"
+```
+
+### `ProblemDetails` / `BUILT_IN_ERROR_CODES`
+
+エラー応答の形式（Problem Details, RFC 9457）と、FW が自動で返すエラーコード。業務上の拒否は、アプリが宣言したエラーコードを拡張メンバー `code` に入れて 4xx で返します。フロントエンドはこの型を `import type` して、エラーコードごとの文言の対応表を網羅させられます。
+
+```ts
+import type { ProblemDetails } from "@u83ism/architecture-rules"
+import type { DomainErrorCode } from "your-api/errors"
+
+const MESSAGES: Record<DomainErrorCode, string> = { USER_ALREADY_EXISTS: "このメールアドレスは登録済みです" }
+const body: ProblemDetails<DomainErrorCode> = await res.json()
 ```
 
 ### `FOLDER_NAMES`

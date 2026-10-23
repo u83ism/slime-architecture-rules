@@ -10,7 +10,7 @@
 
 | 種類 | 説明 | 返却型 |
 |---|---|---|
-| **業務判断** | 条件が業務的に通るかNOかを評価する | `Result<T, DomainError>` |
+| **業務判断** | 条件が業務的に通るかNOかを評価する | `Result<T, DomainErrorCode>` |
 | **ドメイン計算・変換** | ドメイン固有の計算・フォーマット・変換 | 普通の値（失敗しないため） |
 
 ```ts
@@ -118,11 +118,11 @@ WorkflowはLogic由来とAdapter由来のResult.errを同様に扱える：
 ```ts
 // Workflow
 const check = userCanCreate(!!exists)          // Logic: 純粋評価
-if (!check.ok) throw new Error(check.error)
+if (!check.ok) return check
 
 const payment = await chargePayment(amount)    // Adapter: 副作用あり
-if (!payment.ok) throw new Error(payment.error)
-// どちらも同じパターンでFWのエラーハンドラに渡る
+if (!payment.ok) return payment
+// どちらも同じパターンでrouteまで戻り値で運ばれ、4xxに変換される
 ```
 
 ### Adapterがやってはいけないこと

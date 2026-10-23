@@ -25,24 +25,28 @@ Laravelユーザー向けに言えば「ControllerとCommandを足したもの�
 
 ---
 
-### ADR-Lv5：なぜ「Logicだけ」Result型なのか（ROPの射程）
+### ADR-Lv5：なぜ業務上の拒否だけをResult型で運ぶのか（ROPの射程）
 
-Result型（ok/err）をLogicに限定し、Workflow・Store・Parseにまで拡張しない理由は「throwの意味論」にある。
+Result型（ok/err）を業務上の拒否だけに使い、技術的な障害にまで拡張しない理由は「throwの意味論」にある。
 
 - **throw** = 「想定外のことが起きた」（DBが落ちた・ネットワークエラー・プログラムのバグ）→ TechnicalError → 500
 - **Result err** = 「想定内のビジネス上の拒否」（すでに存在する・在庫不足・権限なし）→ DomainError → 4xx
 
 `userCanCreate`が`err("USER_ALREADY_EXISTS")`を返すのは「例外が起きた」のではなく「業務的にNOという判断が出た正常系」だ。これをthrowで表現すると「USER_ALREADY_EXISTSというバグが発生した」と読めてしまい、意味論的なズレが生じる。Result型に懐疑的な立場の人も「業務的な拒否をthrowで表現するのは変」という点はわりと同意する（Javaの検査例外と非検査例外の分類に近い問題意識）。
 
-LogicだけResult型というのは「趣味でResult型を使いたい」のではなく、**throwの意味論が正確に表現できない処理の種別がLogicに集中している**という構造的な理由がある。
+業務上の拒否だけをResult型にするのは「趣味でResult型を使いたい」のではなく、**throwの意味論が正確に表現できない種類のエラーが業務上の拒否に集中している**という構造的な理由がある。
 
-ROPをStore・Parse・Workflowにまで拡張すること（全層Result型統一）は技術的には可能だが、Store/ParseのエラーはInfraError・ParseErrorというTechnicalErrorに近い性質を持ち、Result型で管理するメリットが薄くなる。現設計の「Logicだけ」は、throwの意味論と最も齟齬のない境界線として選ばれた。
+Result型で運ぶ範囲は、**業務上の拒否が生まれる場所（Logicと、外部の拒否を翻訳するclient/adapter）から、それをHTTPの応答に変えるroute（応答形式の関数`json(...)`）まで**である。Workflowは受け取ったerrをthrowに変えず、早期returnでそのまま上に返す。こうすることで「このルートが返しうるエラー」が型に現れる。対応表への登録漏れはコンパイル時に分かり、ルートごとのエラー応答はOpenAPIに出力できる。
+
+ROPをStore・Parseにまで拡張すること（全層Result型統一）は技術的には可能だが、Store/ParseのエラーはInfraError・ParseErrorというTechnicalErrorに近い性質を持ち、Result型で管理するメリットが薄くなる。現設計の境界線は、throwの意味論と最も齟齬のない線として選ばれた。
+
+> **改訂の経緯**：旧版では「Logicだけ」Result型とし、WorkflowはResult errを受け取って`throw new Error(code)`に変換していた。Result型を全面に押し出すのは学習コストが高すぎると考えたためである。しかしこの形では、業務上の拒否が文字列の例外になって型の情報が消え、対応表への登録漏れが本番の500で初めて見つかる。また「業務上の拒否は例外ではない」というこのADR自身の主張とも矛盾していた。そこで、Result型を持ち込むのはLv5（Logic導入時）からのまま、運ぶ範囲をrouteまで延ばした。Result型がまだないLv3〜4では、型つきの`DomainError`をthrowする簡易な形で業務上の拒否を表す。
 
 ---
 
 ### ADR-Lv5：ResultAsync（チェーン専用型）を採用しない理由
 
-ROPをStoreやWorkflowにまで拡張する場合、`Promise<Result<T,E>>`を`.andThen()`でチェーンするために`ResultAsync`という専用ラッパー型（neverthrow等が提供）が必要になる。これを採用しない理由：
+WorkflowがResult型を返す場合（Lv5以降）、`Promise<Result<T,E>>`を`.andThen()`でチェーンするために`ResultAsync`という専用ラッパー型（neverthrow等が提供）が必要になる。これを採用しない理由：
 
 1. **チェーンスタイルは現代TS文化と相性が悪い**：`async/await`の普及により`.then()`チェーンは「古いスタイル」と認識されるようになった。`.andThen()`も同じ印象を与えやすい
 2. **チェーンのためだけに専用型を導入するのは本末転倒**：`ResultAsync`はチェーン記法を可能にするためのラッパーに過ぎず、それ自体がROPの本質ではない
@@ -131,21 +135,21 @@ Application ServiceやUse Caseという用語をLv2で使うと「DDDの文脈�
 
 **A.** Gary Bernhardtの **"Functional Core, Imperative Shell"**（Strange Loop 2012）が理論的根拠になる。
 
-純粋なコア（Logic）と命令型のシェル（Workflow）を分ける設計であり、シェル側のthrowは許容される。Lv5以降でLogicのthrowを禁止しResult型を強制するのはこのトレードオフの現実的な落とし所だ。TypeScriptはHaskellではなく、100%純粋関数型を強制することがこのFWの目的でもない。
+純粋なコア（Logic）と命令型のシェル（Workflow）を分ける設計であり、シェル側のthrowは技術的な障害に限って許容される。Lv5以降でLogicのthrowを禁止し、業務上の拒否をResult型でrouteまで運ばせるのはこのトレードオフの現実的な落とし所だ。TypeScriptはHaskellではなく、100%純粋関数型を強制することがこのFWの目的でもない。
 
 またLv1-4でResult型を強制すると、初学者が「なぜ`ok()`と`err()`でラップしないといけないのか」を理解する前に挫折するリスクが高い。小規模アプリでは`throw`で即座に500エラーにしてしまっても許容範囲が広く、学習曲線を考慮したレベルデザインとして正しい判断だと考えている。
 
 ---
 
-### Q. 「Result型をLogicだけに限定するのはROPとして中途半端では？全層に統一すべきでは？」
+### Q. 「Result型を業務上の拒否だけに限定するのはROPとして中途半端では？全層に統一すべきでは？」
 
 **A.** ROPはthrowをゼロにする設計論ではなく、「throwの意味論が合わない箇所からthrowを追い出す努力」だ。
 
 throwには「想定外の技術的障害（TechnicalError）」という固有の意味がある。DBが落ちたときや外部APIが返答しないときにthrowが発生するのはJS/TSのエコシステム全体の慣行であり、これをResult型に変換しても「技術的障害をResult errで表現する」設計になるだけで本質的な改善にならない。
 
-逆にLogicのビジネス判断（`USER_ALREADY_EXISTS`・`OUT_OF_STOCK`等）は「想定外のことが起きた」ではなく「業務的にNOという判断が出た正常系」であり、throwで表現することが意味論的に正しくない。この不一致がLogicだけResult型の根拠だ。
+逆にLogicのビジネス判断（`USER_ALREADY_EXISTS`・`OUT_OF_STOCK`等）は「想定外のことが起きた」ではなく「業務的にNOという判断が出た正常系」であり、throwで表現することが意味論的に正しくない。この不一致が、業務上の拒否だけをResult型で運ぶ根拠だ。
 
-加えてTS/JSでは外部ライブラリが内部でthrowを使うケースが静的に検知できない。全層をResult型統一してもFW境界での未捕捉throwを受け止めるcatch-allは必須であり、「完全にthrowを排除したアーキテクチャ」はTS/JSでは実現不可能だ。ROPはその現実を踏まえた上で「意味論的に正しい層だけResult型を使う」設計として理解するのが正確だ。
+加えてTS/JSでは外部ライブラリが内部でthrowを使うケースが静的に検知できない。全層をResult型統一してもFW境界での未捕捉throwを受け止めるcatch-allは必須であり、「完全にthrowを排除したアーキテクチャ」はTS/JSでは実現不可能だ。ROPはその現実を踏まえた上で「意味論的に正しい種類のエラーだけResult型で運ぶ」設計として理解するのが正確だ。
 
 ---
 

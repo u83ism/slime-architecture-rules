@@ -118,6 +118,7 @@ src/
   middleware.ts   # 認証・レートリミット・CORS等
   workflow.ts     # 型付きの入力を受け取って処理し、データを返す
   parse.ts        # リクエストのバリデーションと型変換
+  errors.ts       # このアプリが返しうるエラーコード（型のみ）
 ```
 
 ### レイヤールール
@@ -184,7 +185,35 @@ type Principal =
 
 - parse失敗 → FWが400にマップ
 - Middleware拒否 → 401 / 403 / 429
-- 未捕捉のthrow → 500
+- **業務上の拒否**（「すでに登録済み」等）→ workflowが型つきの `DomainError` を投げる → 対応表を引いて4xx
+- 未捕捉のthrow（バグ・DB障害・ネットワーク障害等）→ 500。業務上の拒否を素の `Error` で投げると500になるので使わない
+- エラーコードは `errors.ts` に型として宣言し、HTTPステータスとの対応表（`slime.config.ts`）は `satisfies Record<DomainErrorCode, number>` で全コードの登録を型で強制する
+- エラー応答は **Problem Details**（RFC 9457、`Content-Type: application/problem+json`）で返し、拡張メンバー `code` にエラーコードを入れる
+- Lv5からは、業務上の拒否をthrowせずResult型の戻り値でrouteまで運ぶ（Lv5参照）
+
+```ts
+// errors.ts — このアプリが返しうるエラーコード
+export type DomainErrorCode = "USER_ALREADY_EXISTS" | "USER_NOT_FOUND"
+
+// slime.config.ts — 全コードにHTTPステータスを対応させる（漏れは型エラー）
+export default {
+  errors: {
+    USER_ALREADY_EXISTS: 409,
+    USER_NOT_FOUND: 404,
+  } satisfies Record<DomainErrorCode, number>,
+}
+
+// workflow.ts
+if (exists) throw new DomainError("USER_ALREADY_EXISTS")   // OK：型つき。409になる
+if (exists) throw new Error("USER_ALREADY_EXISTS")         // NG：素のErrorは500になる
+```
+
+```http
+HTTP/1.1 409 Conflict
+Content-Type: application/problem+json
+
+{ "type": "about:blank", "title": "Conflict", "status": 409, "code": "USER_ALREADY_EXISTS" }
+```
 
 ### Kaachanが検査する項目
 
@@ -194,6 +223,8 @@ type Principal =
 - workflow がHTTPのリクエスト・レスポンス・コンテキストに触れている → ⚠️ Warning
 - workflow がparse関数を呼んでいる（parseはrouteで行う） → 💡 Hint
 - workflow が `JSON.parse()` 等で入力を直接パースしている → ⚠️ Warning
+- workflow が素の `Error` を投げている（業務上の拒否なら500になる。Lv3〜4は `DomainError`、Lv5以降は `err()` を使う） → ⚠️ Warning
+- `slime.config.ts` がない（エラーコードとHTTPステータスの対応表を置く） → 💡 Hint
 - `parse.ts` が300行 / 10関数を超えている（共通スキーマは許容） → 💡 Hint
 - `parse.ts` が500行を超えている（`parse/` への分割を促す） → ⚠️ Warning
 - `parse/` 内のファイルが300行を超えている → ❌ Error
@@ -205,6 +236,7 @@ type Principal =
 - `parse.ts`：「Parse, don't validate」原則の導入
 - WorkflowがHTTPに依存しなくなる（routeがparseとWorkflowを組み合わせ、Workflowは型付きの入力とプリンシパルだけを受け取る）
 - 応答形式の関数（`json(parse, workflow)`等）と薄いハンドラー
+- 業務上の拒否を表す `DomainError`、エラーコード（`errors.ts`）とHTTPステータスの対応表（`slime.config.ts`）、Problem Details形式のエラー応答
 
 ---
 
@@ -218,6 +250,7 @@ src/
   middleware.ts   # 認証・レートリミット・CORS等
   workflow.ts     # store/clientを呼んでデータを返す
   parse.ts        # リクエストのバリデーションと型変換
+  errors.ts       # このアプリが返しうるエラーコード（型のみ）
   store.ts        # DBの読み書きすべて
   client.ts       # 外部API呼び出しすべて（腐敗防止層）
 ```
@@ -276,7 +309,8 @@ await withTransaction(async () => {
 
 - parse失敗 → 400
 - Middleware拒否 → 401 / 403 / 429
-- client の `Result.err` → workflow が `throw new Error(code)` → FWがerror mapで4xxにマップ
+- 業務上の拒否 → workflowが `DomainError` を投げる → 4xx（Lv3参照）
+- client の `Result.err`（支払い拒否等の外部の拒否）→ workflowが `DomainError` として投げる → 4xx（Lv5からは戻り値で返す）
 - 未捕捉のthrow → 500
 
 ### Kaachanが検査する項目
@@ -306,6 +340,7 @@ src/
   middleware.ts   # 認証・レートリミット・CORS等
   workflow.ts     # store/clientでデータを解決 → logicで判断 → データを返す
   parse.ts        # リクエストのバリデーションと型変換
+  errors.ts       # このアプリが返しうるエラーコード（型のみ）
   store.ts        # DBの読み書きすべて
   client.ts       # 外部API呼び出しすべて
   logic.ts        # 純粋なビジネス判断とドメイン計算
@@ -319,14 +354,14 @@ src/
 
 | ファイル | やること | やらないこと |
 |---|---|---|
-| `workflow.ts` | データを取得してlogicに渡す（プリミティブを渡す）、Result errをthrowに変換 | 業務判断（それはlogicの仕事） |
+| `workflow.ts` | データを取得してlogicに渡す（プリミティブを渡す）、Result errを早期returnでrouteへ返す | 業務判断（それはlogicの仕事）、業務上の拒否のthrow |
 | `logic.ts` | 業務判断（Result型）、ドメイン計算・変換（純粋な値） | DBアクセス・外部API・副作用・throw |
 
 #### logic.ts の2種類の関数
 
 | 種類 | 説明 | 返却型 |
 |---|---|---|
-| 業務判断 | 条件が業務的に通るか否かを評価 | `Result<T, DomainError>` |
+| 業務判断 | 条件が業務的に通るか否かを評価 | `Result<T, DomainErrorCode>` |
 | ドメイン計算・変換 | ドメイン固有の計算・フォーマット | 普通の値（失敗しないため） |
 
 #### logic.ts 命名規則（Kaachan強制）
@@ -355,23 +390,38 @@ const check = userCanCreate(!!exists)        // LogicはBooleanだけ受け取�
 ```ts
 const post = await findPostById(input.postId)   // Workflowがリソースを解決
 const check = postCanEdit(principal, post)      // Logicが判定
-if (!check.ok) throw new Error(check.error)
+if (!check.ok) return check                     // 拒否は戻り値のままrouteへ
 ```
 
-#### slime.config.ts でDomainErrorをHTTPコードにマッピング
+#### 業務上の拒否はrouteまで戻り値で運ぶ
+
+Lv5から、業務上の拒否（LogicやclientのResult err）はthrowに変えず、Workflowが早期returnでそのままrouteまで返す。応答形式の関数（`json(...)`）がエラーコードの対応表を引き、Problem Details形式の4xxにする。throwは技術的な障害（バグ・DB障害・ネットワーク障害等）専用で、500になる。
 
 ```ts
+// workflow.ts — 拒否は返す。投げない
+export const CreateUserWorkflow = async (input: CreateUserInput): Promise<Result<User, DomainErrorCode>> => {
+  const exists = await findUserByEmail(input.email)
+  const check = userCanCreate(!!exists)
+  if (!check.ok) return check                  // 早期return（throwしない）
+  return ok(await saveUser(input))
+}
+
+// slime.config.ts — 全コードにHTTPステータスを対応させる（漏れは型エラー）
 export default {
   errors: {
     USER_ALREADY_EXISTS: 409,
-    UNAUTHORIZED: 403,
     OUT_OF_STOCK: 422,
-    NOT_FOUND: 404,
     PAYMENT_DECLINED: 402,
-    // 未登録のthrow → 自動的に500
-  }
+  } satisfies Record<DomainErrorCode, number>,
 }
 ```
+
+- 業務上の拒否がありえないWorkflowは、値をそのまま返してよい
+- `json(...)` は、Workflowが返しうるエラーコードを型から知ることができる。対応表にないコードを返すWorkflowを登録するとコンパイルエラーになり、ルートごとのエラー応答はOpenAPIにも出力できる
+- `withTransaction()` は、コールバックがthrowしたときに加えて **errを返したときもロールバック** し、okを返したときだけコミットする
+- Lv3〜4の `throw new DomainError(...)` は、Lv5以降はKaachanが `err()` で返すよう指摘する
+
+> 根拠は補足資料の[ADR-Lv5：なぜ業務上の拒否だけをResult型で運ぶのか](./Kaachan%26Slime%26Slime%20Architecture構想の設計根拠、補足資料.md#adr-lv5なぜ業務上の拒否だけをresult型で運ぶのかropの射程)を参照。
 
 ### Kaachanが検査する項目
 
@@ -383,7 +433,7 @@ export default {
 - `logic.ts` が300行 / 10関数を超えている（`logic/` への分割を促す） → 💡 Hint
 - `logic.ts` が500行を超えている、prefixが混在している、または型依存が交差しない関数群がある → ⚠️ Warning
 - `logic/` 内のファイルが300行を超えている、またはprefixの混在が解消されていない → ❌ Error
-- `slime.config.ts` がない（DomainErrorとHTTPステータスの対応表を置く） → 💡 Hint
+- workflow が `DomainError` を投げている（Lv5以降は `err()` でrouteまで返す） → 💡 Hint
 - Lv4までの検査はすべて継続する
 <!-- END GENERATED -->
 
@@ -397,7 +447,8 @@ export default {
 ### 🆕 Lv5で追加されたこと
 
 - `logic.ts`：業務判断（Result型）とドメイン計算（純粋な値）を分離
-- DomainError / TechnicalErrorの二分類とHTTPコードマッピング（`slime.config.ts`）
+- 業務上の拒否をrouteまでResult型の戻り値で運ぶ方式（Lv3〜4の `DomainError` のthrowから移行）
+- `withTransaction()` がerrの戻り値でもロールバックする
 - Functional Core, Imperative Shell（Logic=純粋なコア、Workflow=命令型シェル）の萌芽
 
 ---
@@ -427,6 +478,7 @@ src/
   domainUser/
     routes.ts         # userドメインのルート定義（parseとWorkflowを組み合わせる）
     parse.ts          # userドメインの入力スキーマ（Lv6でapp/から移動）
+    errors.ts         # userドメインのエラーコード（USER_*。型のみ）
     workflow.ts       # parse済みの入力とプリンシパルを受け取る
     logic.ts          # userドメインの業務判断・計算
     store.ts          # userドメインのDBアクセス
@@ -499,6 +551,7 @@ shared/ はdomainフォルダをimportしない。
 #### domainXxx/ 内のルール（Lv1〜5のルールが各domainに適用される）
 
 - `parse.ts`：このdomainの入力スキーマ。ルールはLv3の`parse.ts`と同じ
+- `errors.ts`：このdomainのエラーコード（型のみ）。名前にdomain名の接頭辞を付ける（`domainUser` なら `USER_*`）。HTTPステータスとの対応はdomainの外（`slime.config.ts`）に置き、全domainのコードの和集合に対して `satisfies` で登録漏れを検出する
 - `workflow.ts`：`routes.ts`でparse済みの入力とプリンシパルを受け取る。ORM直接importは禁止。外部APIは`client/adapter.ts`経由で呼ぶ
 - `logic.ts`：ドメインprefix命名必須、Result型、テスト必須（Lv5〜6はテストなしがWarning、Lv7でError化）
 - `store.ts`：命名規則違反は**❌ Error**（Lv4の💡 HintからLv6でError化）、ORM型の戻り値禁止
@@ -519,9 +572,11 @@ export const userRoutes = (r: Router) => {
 <!-- BEGIN GENERATED: kaachan-checks lv=6 （src/rules-catalog.ts から自動生成。手で編集しない） -->
 - store の関数名が命名規則（`find*` / `list*` / `get*` / `count*` / `search*` / `create*` / `save*` / `update*` / `delete*` / `remove*`）に違反している → ❌ Error（Lv5の💡 Hintから変更）
 - store がORM型を戻り値に使っている → ❌ Error（Lv5の⚠️ Warningから変更）
+- workflow が `DomainError` を投げている（Lv5以降は `err()` でrouteまで返す） → ⚠️ Warning（Lv5の💡 Hintから変更）
 - 依存宣言にないdomain間のimport → ❌ Error
 - domain間の依存宣言に循環がある → ❌ Error
 - `client/client.ts` を直接importしている（`client/adapter.ts` を経由していない） → ❌ Error
+- domainのエラーコードにdomain名の接頭辞がない（`domainUser` なら `USER_*`） → ⚠️ Warning
 - `shared/` がdomainフォルダをimportしている → ⚠️ Warning
 - `shared/utility.ts` / `shared/smallLogic.ts` に副作用がある → ❌ Error
 - `shared/` のファイルが肥大化している → ⚠️ Warning
@@ -744,9 +799,11 @@ Lv8からorchestrate-はトランザクション専用に特化する。
 // orchestrate-order-inventory/workflow.ts — トランザクション専用
 export const createOrderWithInventory = (input: ValidatedInput) =>
   withTransaction(async () => {
-    const event = await orderDomain.createOrder(input)
-    await inventoryDomain.deductStock(event.payload.items)  // 失敗したらロールバック
-    return event
+    const placed = await orderDomain.createOrder(input)
+    if (!placed.ok) return placed                            // errを返すとロールバック
+    const deducted = await inventoryDomain.deductStock(placed.value.payload.items)
+    if (!deducted.ok) return deducted                        // 在庫不足等でもロールバック
+    return placed
   })
 ```
 
@@ -857,12 +914,12 @@ DIコンテナもclassも使わない。Portを引数で受け取る関数とし
 // domainUser/workflow.ts
 export const createUserWorkflow =
   (port: UserPort) =>           // Portを引数で受け取る
-  async (input: ValidatedInput): Promise<UserCreatedEvent> => {
+  async (input: ValidatedInput): Promise<Result<UserCreatedEvent, UserErrorCode>> => {
     const exists = await port.findByEmail(input.email)
     const check = userCanCreate(!!exists)
-    if (!check.ok) throw new Error(check.error)
+    if (!check.ok) return check
     const user = await port.save(input)
-    return { type: "USER_CREATED", payload: { userId: user.id, email: user.email } }
+    return ok({ type: "USER_CREATED", payload: { userId: user.id, email: user.email } })
   }
 
 // app/workflow.ts — infrastructureをdomainに注入する合成ルート
@@ -1070,6 +1127,8 @@ export const userQueryAdapter: UserReadPort = {
 | `workflow-http-access` | workflow がHTTPのリクエスト・レスポンス・コンテキストに触れている | — | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
 | `workflow-calls-parse` | workflow がparse関数を呼んでいる（parseはrouteで行う） | — | 💡 | 💡 | 💡 | 💡 | 💡 | 💡 | 💡 | 💡 |
 | `workflow-raw-parse` | workflow が `JSON.parse()` 等で入力を直接パースしている | — | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
+| `workflow-throws-plain-error` | workflow が素の `Error` を投げている（業務上の拒否なら500になる。Lv3〜4は `DomainError`、Lv5以降は `err()` を使う） | — | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
+| `slime-config-missing` | `slime.config.ts` がない（エラーコードとHTTPステータスの対応表を置く） | — | 💡 | 💡 | 💡 | 💡 | 💡 | 💡 | 💡 | 💡 |
 | `parse-size-hint` | `parse.ts` が300行 / 10関数を超えている（共通スキーマは許容） | — | 💡 | 💡 | 💡 | 💡 | 💡 | 💡 | 💡 | 💡 |
 | `parse-size-warning` | `parse.ts` が500行を超えている（`parse/` への分割を促す） | — | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
 | `parse-folder-file-too-large` | `parse/` 内のファイルが300行を超えている | — | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
@@ -1084,10 +1143,11 @@ export const userQueryAdapter: UserReadPort = {
 | `logic-size-hint` | `logic.ts` が300行 / 10関数を超えている（`logic/` への分割を促す） | — | — | — | 💡 | 💡 | 💡 | 💡 | 💡 | 💡 |
 | `logic-size-warning` | `logic.ts` が500行を超えている、prefixが混在している、または型依存が交差しない関数群がある | — | — | — | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
 | `logic-folder-file-too-large` | `logic/` 内のファイルが300行を超えている、またはprefixの混在が解消されていない | — | — | — | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| `slime-config-missing` | `slime.config.ts` がない（DomainErrorとHTTPステータスの対応表を置く） | — | — | — | 💡 | 💡 | 💡 | 💡 | 💡 | 💡 |
+| `workflow-throws-domain-error` | workflow が `DomainError` を投げている（Lv5以降は `err()` でrouteまで返す） | — | — | — | 💡 | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
 | `domain-undeclared-import` | 依存宣言にないdomain間のimport | — | — | — | — | ❌ | ❌ | ❌ | ❌ | ❌ |
 | `domain-dependency-cycle` | domain間の依存宣言に循環がある | — | — | — | — | ❌ | ❌ | ❌ | ❌ | ❌ |
 | `client-direct-import` | `client/client.ts` を直接importしている（`client/adapter.ts` を経由していない） | — | — | — | — | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `error-code-missing-prefix` | domainのエラーコードにdomain名の接頭辞がない（`domainUser` なら `USER_*`） | — | — | — | — | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
 | `shared-imports-domain` | `shared/` がdomainフォルダをimportしている | — | — | — | — | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
 | `shared-side-effects` | `shared/utility.ts` / `shared/smallLogic.ts` に副作用がある | — | — | — | — | ❌ | ❌ | ❌ | ❌ | ❌ |
 | `shared-size` | `shared/` のファイルが肥大化している | — | — | — | — | ⚠️ | ❌ | ❌ | ❌ | ❌ |

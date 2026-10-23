@@ -13,6 +13,7 @@ export const LAYER_FILES = {
   CLIENT: "client.ts",
   LOGIC: "logic.ts",
   PORTS: "ports.ts",
+  ERRORS: "errors.ts",
 } as const
 
 export type LayerFile = (typeof LAYER_FILES)[keyof typeof LAYER_FILES]

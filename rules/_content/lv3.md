@@ -13,6 +13,7 @@ src/
   middleware.ts   # Authentication, rate limiting, CORS, etc.
   workflow.ts     # Request orchestration (calls parse, then DB/external)
   parse.ts        # Request validation and transformation
+  errors.ts       # Error codes this app can return (types only)
 ```
 
 ---
@@ -110,9 +111,38 @@ export const parseCreateUser = async (body: unknown) => {
 
 ## Error Handling
 
-- **Validation failures** (`parse.ts` throws): framework maps to HTTP 400.
-- **Auth/middleware rejection**: framework maps to 401, 403, or 429.
-- **Unhandled throws**: framework maps to HTTP 500.
+- **Validation failures** (`parse.ts` throws): framework returns HTTP 400.
+- **Auth/middleware rejection**: framework returns 401, 403, or 429.
+- **Business rejections** (e.g., "this email is already registered"): throw a typed `DomainError` with a code declared in `errors.ts`. The response wrapper maps the code to a 4xx status.
+- **Unhandled throws** (bugs, DB down, network failure): framework returns HTTP 500. Never use a plain `Error` for a business rejection — it becomes a 500.
+- Every error code needs an HTTP status in the status map. Use `satisfies Record<DomainErrorCode, number>` so a missing entry is a type error.
+- Error responses use **Problem Details** (RFC 9457, `Content-Type: application/problem+json`) with a `code` extension member.
+
+```ts
+// errors.ts — the error codes this app can return
+export type DomainErrorCode = "USER_ALREADY_EXISTS" | "USER_NOT_FOUND"
+
+// slime.config.ts — an HTTP status for every code
+export default {
+  errors: {
+    USER_ALREADY_EXISTS: 409,
+    USER_NOT_FOUND: 404,
+  } satisfies Record<DomainErrorCode, number>,
+}
+
+// workflow.ts
+if (exists) throw new DomainError("USER_ALREADY_EXISTS")   // OK — typed, mapped to 409
+if (exists) throw new Error("USER_ALREADY_EXISTS")         // NG — a plain Error becomes 500
+```
+
+```http
+HTTP/1.1 409 Conflict
+Content-Type: application/problem+json
+
+{ "type": "about:blank", "title": "Conflict", "status": 409, "code": "USER_ALREADY_EXISTS" }
+```
+
+From Lv5, business rejections are returned as `Result.err` instead of thrown.
 
 ---
 
@@ -136,10 +166,12 @@ Severity: 💡 Hint = information, ⚠️ Warning = likely problem, ❌ Error = 
 - ⚠️ Warning — `workflow.ts` exceeds ~500 lines
 - ⚠️ Warning — A workflow touches HTTP request, response, or context objects
 - ⚠️ Warning — A workflow parses raw input directly (e.g., `JSON.parse()`)
+- ⚠️ Warning — A workflow throws a plain `Error` (a business rejection would become HTTP 500; use `DomainError` at Lv3–4 and `err()` from Lv5)
 - ⚠️ Warning — `parse.ts` exceeds ~500 lines (split into `parse/`)
 - 💡 Hint — API routes are defined outside an `/api` group
 - 💡 Hint — `workflow.ts` exceeds ~300 lines or ~10 functions
 - 💡 Hint — A workflow calls a parse function (parsing belongs in route)
+- 💡 Hint — `slime.config.ts` is missing (it maps error codes to HTTP status codes)
 - 💡 Hint — `parse.ts` exceeds ~300 lines or ~10 functions (shared schemas are allowed)
 <!-- END GENERATED -->
 

@@ -13,6 +13,7 @@ src/
   middleware.ts   # Authentication, rate limiting, CORS, etc.
   workflow.ts     # Request orchestration (parse → logic → store/client → response)
   parse.ts        # Request validation and transformation
+  errors.ts       # Error codes this app can return (types only)
   store.ts        # All DB reads and writes
   client.ts       # All external API calls
   logic.ts        # Pure business judgment and domain calculations
@@ -56,7 +57,7 @@ route.group({ prefix: '/api' }, (r) => {
 - Receives typed input and the principal (in that order; the principal may be omitted). Resolves data via `store`/`client`, judges via `logic`, writes, and returns data.
 - Must not touch HTTP request, response, or context objects, and must not call parse functions.
 - Calls store for data, passes **resolved primitive values** to logic — never passes store functions into logic.
-- Handles `Result` errors from logic and client, converting them to `throw new Error(errorCode)`.
+- Returns `Result` errors from logic and client upward with an early `return` — never converts them to `throw` (see Error Handling).
 - Must not contain business judgment (belongs in `logic.ts`).
 - Must not contain validation logic (belongs in `parse.ts`).
 - When multiple store operations must succeed or fail together, use `withTransaction()`.
@@ -66,16 +67,16 @@ route.group({ prefix: '/api' }, (r) => {
 export const CreateUserWorkflow = async (input: CreateUserInput) => {
   const exists = await findUserByEmail(input.email)        // store resolves data
   const check = userCanCreate(!!exists)                    // logic receives primitive
-  if (!check.ok) throw new Error(check.error)
-  return await saveUser({ ...input, id: generateId() })
+  if (!check.ok) return check                              // rejection returned, not thrown
+  return ok(await saveUser({ ...input, id: generateId() }))
 }
 
 // OK — resource-level authorization: workflow loads the resource, logic decides
 export const UpdatePostWorkflow = async (input: UpdatePostInput, principal: Principal) => {
   const post = await findPostById(input.postId)
   const check = postCanEdit(principal, post)
-  if (!check.ok) throw new Error(check.error)
-  return await updatePost(input)
+  if (!check.ok) return check
+  return ok(await updatePost(input))
 }
 
 // NG — workflow doing business judgment itself
@@ -105,7 +106,7 @@ if (exists) throw new Error('USER_ALREADY_EXISTS')  // belongs in logic.ts
 ### logic.ts (new at Lv5)
 - **Pure functions only**: no DB access, no external API calls, no side effects.
 - Two types of functions are allowed:
-  1. **Business judgment**: evaluates a condition and returns `Result<T, DomainError>`
+  1. **Business judgment**: evaluates a condition and returns `Result<T, DomainErrorCode>`
   2. **Domain calculation/transformation**: computes or formats a value, returns a plain value
 
 - **Naming convention** (enforced by Kaachan): functions must have a domain prefix.
@@ -148,26 +149,42 @@ export const userCanCreate = (exists: boolean) => {
 
 ## Error Handling
 
-Configure `slime.config.ts` to map domain error codes to HTTP status codes:
+- **Validation failures**: framework returns HTTP 400. **Auth/middleware rejection**: 401, 403, or 429.
+- **Business rejections travel as return values all the way to the route.** `logic.ts` and `client.ts` return `Result.err(code)`. The workflow passes it upward with an early `return`. The response wrapper (`json(...)`) maps the code to a 4xx status.
+- **Do not throw business rejections** from workflows. `throw new DomainError(...)` was the Lv3–4 style; from Lv5 return `err(...)` instead. `throw` is reserved for technical failures (bugs, DB down, network), which become HTTP 500.
+- Workflows that cannot reject may return a plain value.
+- `withTransaction()` rolls back when its callback returns `err` (as well as when it throws) and commits on `ok`.
+- Every error code needs an HTTP status in the status map. Use `satisfies Record<DomainErrorCode, number>` so a missing entry is a type error.
+- Error responses use **Problem Details** (RFC 9457, `Content-Type: application/problem+json`) with a `code` extension member.
 
 ```ts
-// slime.config.ts
+// workflow.ts — rejections are returned, not thrown
+export const CreateUserWorkflow = async (input: CreateUserInput): Promise<Result<User, DomainErrorCode>> => {
+  const exists = await findUserByEmail(input.email)
+  const check = userCanCreate(!!exists)
+  if (!check.ok) return check                  // early return — no throw
+  return ok(await saveUser(input))
+}
+
+// errors.ts — the error codes this app can return
+export type DomainErrorCode = "USER_ALREADY_EXISTS" | "OUT_OF_STOCK" | "PAYMENT_DECLINED"
+
+// slime.config.ts — an HTTP status for every code
 export default {
   errors: {
     USER_ALREADY_EXISTS: 409,
-    UNAUTHORIZED: 403,
     OUT_OF_STOCK: 422,
-    NOT_FOUND: 404,
     PAYMENT_DECLINED: 402,
-    // unlisted throws → automatic 500
-  }
+  } satisfies Record<DomainErrorCode, number>,
 }
 ```
 
-- **Validation failures** (`parse.ts` throws): framework maps to HTTP 400.
-- **Auth/middleware rejection**: framework maps to 401, 403, or 429.
-- **Domain errors** (`Result.err` from logic or client → `throw new Error(code)`): framework maps via error map to 4xx.
-- **Unhandled throws**: framework maps to HTTP 500.
+```http
+HTTP/1.1 409 Conflict
+Content-Type: application/problem+json
+
+{ "type": "about:blank", "title": "Conflict", "status": 409, "code": "USER_ALREADY_EXISTS" }
+```
 
 ---
 
@@ -196,6 +213,7 @@ Severity: 💡 Hint = information, ⚠️ Warning = likely problem, ❌ Error = 
 - ⚠️ Warning — `workflow.ts` exceeds ~500 lines
 - ⚠️ Warning — A workflow touches HTTP request, response, or context objects
 - ⚠️ Warning — A workflow parses raw input directly (e.g., `JSON.parse()`)
+- ⚠️ Warning — A workflow throws a plain `Error` (a business rejection would become HTTP 500; use `DomainError` at Lv3–4 and `err()` from Lv5)
 - ⚠️ Warning — `parse.ts` exceeds ~500 lines (split into `parse/`)
 - ⚠️ Warning — A workflow calls an ORM-specific transaction API directly (use `withTransaction()`)
 - ⚠️ Warning — A store function returns an ORM type
@@ -205,10 +223,11 @@ Severity: 💡 Hint = information, ⚠️ Warning = likely problem, ❌ Error = 
 - 💡 Hint — API routes are defined outside an `/api` group
 - 💡 Hint — `workflow.ts` exceeds ~300 lines or ~10 functions
 - 💡 Hint — A workflow calls a parse function (parsing belongs in route)
+- 💡 Hint — `slime.config.ts` is missing (it maps error codes to HTTP status codes)
 - 💡 Hint — `parse.ts` exceeds ~300 lines or ~10 functions (shared schemas are allowed)
 - 💡 Hint — A store function name violates the naming convention (`find*` / `list*` / `get*` / `count*` / `search*` / `create*` / `save*` / `update*` / `delete*` / `remove*`)
 - 💡 Hint — `logic.ts` exceeds ~300 lines or ~10 functions (consider splitting into `logic/`)
-- 💡 Hint — `slime.config.ts` is missing (it maps domain error codes to HTTP status codes)
+- 💡 Hint — A workflow throws a `DomainError` (from Lv5, return `err()` up to the route instead)
 <!-- END GENERATED -->
 
 ---
