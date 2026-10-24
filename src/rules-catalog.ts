@@ -386,6 +386,23 @@ export const RULE_CATALOG: readonly RuleDefinition[] = [
     },
     severity: [[6, "warning"]],
   },
+  // 統合・切り直しの兆候。境界が誤っているかは人間にしか判断できないので、hintから上げない
+  {
+    id: "domain-pair-coordinated",
+    summary: {
+      ja: "App層や `orchestrate/` が同じdomainの組を繰り返し一緒に呼んでいる（統合や境界の見直しを検討する）",
+      en: "The App layer or `orchestrate/` repeatedly calls the same pair of domains together (consider merging them or redrawing the boundary)",
+    },
+    severity: [[6, "hint"]],
+  },
+  {
+    id: "domain-folder-thin",
+    summary: {
+      ja: "中身の薄いdomainフォルダがある（他のdomainへの統合を検討する）",
+      en: "A domain folder has very little in it (consider merging it into another domain)",
+    },
+    severity: [[6, "hint"]],
+  },
 
   // ---- Lv7: orchestrate/ ----
   {

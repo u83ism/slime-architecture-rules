@@ -269,6 +269,8 @@ Severity: 💡 Hint = information, ⚠️ Warning = likely problem, ❌ Error = 
 - 💡 Hint — `logic.ts` exceeds ~300 lines or ~10 functions (consider splitting into `logic/`)
 - 💡 Hint — A workflow is not referenced by any route (unreachable workflow candidate)
 - 💡 Hint — A domain folder has no `routes.ts`
+- 💡 Hint — The App layer or `orchestrate/` repeatedly calls the same pair of domains together (consider merging them or redrawing the boundary)
+- 💡 Hint — A domain folder has very little in it (consider merging it into another domain)
 - 💡 Hint — Non-DB async work (email, external API calls) inside `withTransaction()` (suggests `defer()`; opt-in)
 - 💡 Hint — A domain has `ports.ts` but its workflow does not receive a port as an argument
 <!-- END GENERATED -->
@@ -293,6 +295,27 @@ When migrating from Lv8 to Lv9:
 3. Update domain `workflow.ts` to receive the port as a constructor argument.
 4. Wire the adapter in `app/workflow.ts`.
 5. Delete `store.ts` from all domain and shared folders.
+
+### Naming, Splitting, and Merging Domains
+
+Domain names and boundaries are domain vocabulary, and the user ratifies them: Kaachan detects, you propose, the user decides. Never create, merge, or rename a domain folder, an `orchestrate/` folder, or a `logic/` file without the user's approval.
+
+Every proposal contains:
+1. **The candidate groups** — which functions and files go where, and why they belong together.
+2. **A name for each group, labeled with its provenance**:
+   - **established** — traceable to a word the user actually used, or to a name the user previously approved.
+   - **coined** — anything else. Give a one-line definition and expect the user to question it.
+   A word that appears only in AI-written docs, comments, or identifiers is NOT established: an AI coinage recorded in a document is still a coinage. Specs and business terms the user brought in count as established; specs written by an AI do not.
+3. **A "keep as-is" option** — splitting and merging cost import churn and declaration updates, so leaving the structure alone is a legitimate outcome.
+
+Size thresholds only catch growth. Also watch for the reverse — the current split may be on the wrong axis, or two domains may really be one concern:
+- Adding a dependency direction would create a cycle → the boundary is likely in the wrong place.
+- The App layer or `orchestrate/` calls the same pair of domains together again and again → they may be one domain.
+- A domain folder has very little in it → over-split.
+- Business judgment accumulates in `shared/` → a domain that has not been named yet.
+- The same set of domains keeps changing together across unrelated commits (check `git log --name-only -- src/domains`) → the split does not follow the real boundary.
+
+When you notice one of these signs, propose a merge or re-cut in the same form as a split. Do this only when a sign appears or the user asks — do not propose reorganizations unprompted. When applying an approved merge or re-cut, also update everything keyed by the domain name: the dependency declaration in `slime.config.ts`, the error code prefixes (`USER_*`), `routes.ts`, and `infrastructure/<domain>/`.
 
 ---
 

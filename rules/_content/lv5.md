@@ -239,8 +239,26 @@ When `workflow.ts` or `logic.ts` is approaching the size thresholds above:
 2. Identify function groups by domain prefix (e.g., all `user*` functions, all `order*` functions).
 3. If type dependencies between function groups do not intersect, suggest them as domain split candidates.
 4. Suggest splitting into `logic/user.ts`, `logic/order.ts` as a precursor to Lv6 domain folders.
-5. Only proceed with structural changes after user confirmation.
+5. Present the proposal in the form described below, and only proceed with structural changes after user confirmation.
 6. Use `slime level:next` to show what Lv6 requires before suggesting the migration.
+
+### Naming, Splitting, and Merging Domains
+
+Domain names and boundaries are domain vocabulary, and the user ratifies them: Kaachan detects, you propose, the user decides. Never create, merge, or rename a `logic/` file without the user's approval.
+
+Every proposal contains:
+1. **The candidate groups** — which functions go where, and why they belong together.
+2. **A name for each group, labeled with its provenance**:
+   - **established** — traceable to a word the user actually used, or to a name the user previously approved.
+   - **coined** — anything else. Give a one-line definition and expect the user to question it.
+   A word that appears only in AI-written docs, comments, or identifiers is NOT established: an AI coinage recorded in a document is still a coinage. Specs and business terms the user brought in count as established; specs written by an AI do not.
+3. **A "keep as-is" option** — splitting and merging cost import churn, so leaving the structure alone is a legitimate outcome.
+
+Size thresholds only catch growth. Also watch for the reverse — the current split may be on the wrong axis, or two groups may really be one concern:
+- The same set of `logic/` files keeps changing together across unrelated changes.
+- Two `logic/` files call each other's functions or share most of their types.
+
+When you notice one of these signs, propose a merge or re-cut in the same form as a split. Do this only when a sign appears or the user asks — do not propose reorganizations unprompted.
 
 ---
 
