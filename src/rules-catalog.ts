@@ -291,6 +291,38 @@ export const RULE_CATALOG: readonly RuleDefinition[] = [
     severity: [[6, "error"]],
   },
   {
+    id: "table-foreign-write",
+    summary: {
+      ja: "domainのstoreが、他domainの所有するテーブルに書き込んでいる",
+      en: "A domain store writes to a table owned by another domain",
+    },
+    severity: [[6, "error"]],
+  },
+  {
+    id: "table-foreign-read",
+    summary: {
+      ja: "domainのstoreが、他domainの所有するテーブルを直接読んでいる（所有domainの関数を経由する。Lv10の読み取り側アダプターは除く）",
+      en: "A domain store reads a table owned by another domain directly (go through the owning domain's functions; Lv10 read-side adapters are exempt)",
+    },
+    severity: [[6, "warning"]],
+  },
+  {
+    id: "table-owner-duplicate",
+    summary: {
+      ja: "1つのテーブルを複数のdomainが所有宣言している",
+      en: "More than one domain declares ownership of the same table",
+    },
+    severity: [[6, "error"]],
+  },
+  {
+    id: "table-owner-undeclared",
+    summary: {
+      ja: "domainのstoreが、所有の宣言されていないテーブルに触れている（`slime.config.ts` の `tables` に宣言する）",
+      en: "A domain store touches a table with no declared owner (declare it under `tables` in `slime.config.ts`)",
+    },
+    severity: [[6, "hint"]],
+  },
+  {
     id: "client-direct-import",
     summary: {
       ja: "`client/client.ts` を直接importしている（`client/adapter.ts` を経由していない）",

@@ -1,5 +1,5 @@
 export type { Severity } from "./severity.js"
-export type { DomainDependencies } from "./dependencies.js"
+export type { DomainDependencies, TableOwnership } from "./dependencies.js"
 
 export { PROBLEM_DETAILS_CONTENT_TYPE, BUILT_IN_ERROR_CODES } from "./problem-details.js"
 export type { ProblemDetails, InvalidParam, BuiltInErrorCode } from "./problem-details.js"

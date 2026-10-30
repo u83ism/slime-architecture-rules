@@ -50,6 +50,9 @@ src/
 - `app/` may import from any domain regardless of the declaration (to aggregate routes and orchestrate).
 - Capabilities used by many domains (identity/auth, tenant) are **upstream domains**: ordinary domain folders that depend on no other domain. Do not create a special folder kind for them.
 - Settings belong to the domain whose rules use them. A single settings table is a storage detail, not a domain boundary.
+- **Table ownership**: declare in `slime.config.ts` which domain owns each table (by ORM model name). Only the owning domain's store writes to a table. Reading another domain's table goes through the owning domain's store functions, following the dependency DAG — never query it directly. A table has exactly one owner; tables with no declared owner are handled from `shared/store.ts`.
+- To combine data owned by several domains, fetch each in bulk with the owner's `find*ByIds` and join in memory. If that becomes too heavy or complex, it is a sign to move to Lv10, where read-side adapters may join across domains.
+- Slime Architecture does not cover database design itself (normalization, indexes, column types, naming) — only which domain owns which table.
 
 ```ts
 // slime.config.ts — declared dependency DAG
@@ -58,6 +61,12 @@ export default {
     auth: [],                            // upstream: depends on no other domain
     user: ['auth'],
     order: ['auth', 'user'],
+  },
+  // table ownership: domain → tables it owns (ORM model names)
+  tables: {
+    auth: ['session'],
+    user: ['user', 'userProfile'],
+    order: ['order', 'orderItem'],
   },
 }
 
@@ -222,6 +231,8 @@ Severity: 💡 Hint = information, ⚠️ Warning = likely problem, ❌ Error = 
 - ❌ Error — A file in `logic/` exceeds ~300 lines or still mixes domain prefixes
 - ❌ Error — An inter-domain import that is not in the dependency declaration
 - ❌ Error — The domain dependency declaration contains a cycle
+- ❌ Error — A domain store writes to a table owned by another domain
+- ❌ Error — More than one domain declares ownership of the same table
 - ❌ Error — `client/client.ts` is imported directly (bypassing `client/adapter.ts`)
 - ❌ Error — `shared/utility.ts` or `shared/smallLogic.ts` has side effects
 - ❌ Error — `app/client.ts` exists (move it to `client/`)
@@ -238,6 +249,7 @@ Severity: 💡 Hint = information, ⚠️ Warning = likely problem, ❌ Error = 
 - ⚠️ Warning — `logic.ts` exceeds ~500 lines, mixes domain prefixes, or contains function groups whose type dependencies do not intersect
 - ⚠️ Warning — A workflow throws a `DomainError` (from Lv5, return `err()` up to the route instead)
 - ⚠️ Warning — A folder directly under `domains/` or `orchestrate/` is not named in kebab-case
+- ⚠️ Warning — A domain store reads a table owned by another domain directly (go through the owning domain's functions; Lv10 read-side adapters are exempt)
 - ⚠️ Warning — A domain error code lacks the domain prefix (`domains/user` → `USER_*`)
 - ⚠️ Warning — `shared/` imports from a domain folder
 - ⚠️ Warning — A file in `shared/` is too large
@@ -256,6 +268,7 @@ Severity: 💡 Hint = information, ⚠️ Warning = likely problem, ❌ Error = 
 - 💡 Hint — A store filter uses a generic shape such as `{ column, op, value }` (use a closed type in business vocabulary)
 - 💡 Hint — A store function is called inside a loop (`for` / `forEach` / `map`, etc.), which can cause N+1 queries (add a batch function to the store)
 - 💡 Hint — `logic.ts` exceeds ~300 lines or ~10 functions (consider splitting into `logic/`)
+- 💡 Hint — A domain store touches a table with no declared owner (declare it under `tables` in `slime.config.ts`)
 - 💡 Hint — A workflow is not referenced by any route (unreachable workflow candidate)
 - 💡 Hint — A domain folder has no `routes.ts`
 - 💡 Hint — The App layer or `orchestrate/` repeatedly calls the same pair of domains together (consider merging them or redrawing the boundary)

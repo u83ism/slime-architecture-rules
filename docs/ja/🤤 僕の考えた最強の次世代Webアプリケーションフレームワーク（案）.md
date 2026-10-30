@@ -294,6 +294,10 @@ Slimeが自動カバーする範囲：Parse失敗→400 / Middleware拒否→401
 - `domains/`・`orchestrate/` 直下のフォルダ名がkebab-caseでない → ⚠️ Warning
 - 依存宣言にないdomain間のimport → ❌ Error
 - domain間の依存宣言に循環がある → ❌ Error
+- domainのstoreが、他domainの所有するテーブルに書き込んでいる → ❌ Error
+- domainのstoreが、他domainの所有するテーブルを直接読んでいる（所有domainの関数を経由する。Lv10の読み取り側アダプターは除く） → ⚠️ Warning
+- 1つのテーブルを複数のdomainが所有宣言している → ❌ Error
+- domainのstoreが、所有の宣言されていないテーブルに触れている（`slime.config.ts` の `tables` に宣言する） → 💡 Hint
 - `client/client.ts` を直接importしている（`client/adapter.ts` を経由していない） → ❌ Error
 - domainのエラーコードにdomain名の接頭辞がない（`domains/user` なら `USER_*`） → ⚠️ Warning
 - `shared/` がdomainフォルダをimportしている → ⚠️ Warning

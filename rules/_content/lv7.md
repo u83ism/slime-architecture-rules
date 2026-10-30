@@ -127,6 +127,7 @@ export const UpdateProfileWorkflow = async (input: ValidatedInput) => {
 
 - Domain folders live directly under `domains/` in kebab-case: `domains/user`, `domains/order`.
 - Inter-domain imports follow the declared dependency DAG (see Lv6). Nested domains are expressed as declared dependencies too.
+- Table ownership (see Lv6): only the owning domain's store writes to a table; other domains read it through the owner's functions.
 - Domains must not import from `orchestrate/` folders.
 
 ### Layer rules within each domain
@@ -215,6 +216,8 @@ Severity: 💡 Hint = information, ⚠️ Warning = likely problem, ❌ Error = 
 - ❌ Error — A file in `logic/` exceeds ~300 lines or still mixes domain prefixes
 - ❌ Error — An inter-domain import that is not in the dependency declaration
 - ❌ Error — The domain dependency declaration contains a cycle
+- ❌ Error — A domain store writes to a table owned by another domain
+- ❌ Error — More than one domain declares ownership of the same table
 - ❌ Error — `client/client.ts` is imported directly (bypassing `client/adapter.ts`)
 - ❌ Error — `shared/utility.ts` or `shared/smallLogic.ts` has side effects
 - ❌ Error — A file in `shared/` is too large
@@ -237,6 +240,7 @@ Severity: 💡 Hint = information, ⚠️ Warning = likely problem, ❌ Error = 
 - ⚠️ Warning — `logic.ts` exceeds ~500 lines, mixes domain prefixes, or contains function groups whose type dependencies do not intersect
 - ⚠️ Warning — A workflow throws a `DomainError` (from Lv5, return `err()` up to the route instead)
 - ⚠️ Warning — A folder directly under `domains/` or `orchestrate/` is not named in kebab-case
+- ⚠️ Warning — A domain store reads a table owned by another domain directly (go through the owning domain's functions; Lv10 read-side adapters are exempt)
 - ⚠️ Warning — A domain error code lacks the domain prefix (`domains/user` → `USER_*`)
 - ⚠️ Warning — `shared/` imports from a domain folder
 - ⚠️ Warning — `app/route.ts` defines routes (move them to `domains/xxx/routes.ts`)
@@ -251,6 +255,7 @@ Severity: 💡 Hint = information, ⚠️ Warning = likely problem, ❌ Error = 
 - 💡 Hint — A store filter uses a generic shape such as `{ column, op, value }` (use a closed type in business vocabulary)
 - 💡 Hint — A store function is called inside a loop (`for` / `forEach` / `map`, etc.), which can cause N+1 queries (add a batch function to the store)
 - 💡 Hint — `logic.ts` exceeds ~300 lines or ~10 functions (consider splitting into `logic/`)
+- 💡 Hint — A domain store touches a table with no declared owner (declare it under `tables` in `slime.config.ts`)
 - 💡 Hint — A workflow is not referenced by any route (unreachable workflow candidate)
 - 💡 Hint — A domain folder has no `routes.ts`
 - 💡 Hint — The App layer or `orchestrate/` repeatedly calls the same pair of domains together (consider merging them or redrawing the boundary)

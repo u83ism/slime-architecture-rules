@@ -723,6 +723,38 @@ export default {
 - 認証のMiddleware自体は`app/middleware.ts`に置き、そこから上流domainを呼ぶ（domainフォルダにMiddlewareを置くと、そのMiddlewareを使う側との依存が逆転しやすい）
 - 設定値は、そのキーを使うルールを持つdomainに置く（設定テーブルが1つにまとまっているのは保存の都合であり、domain境界ではない）
 
+#### テーブルの所有権
+
+domainごとに `store.ts` を分けても、どのstoreからでもどのテーブルでも触れるなら、domainはDBを通じて裏で結合したままになる。依存のDAGをimportだけでなくDBにも適用するため、**各テーブルの所有domainを宣言する**。
+
+```ts
+// slime.config.ts
+export default {
+  domains: {
+    auth: [],
+    user: ['auth'],
+    order: ['auth', 'user'],
+  },
+  // キーはdomain、値はそのdomainが所有するテーブル（コード上に現れるORMのモデル名で書く）
+  tables: {
+    auth: ['session'],
+    user: ['user', 'userProfile'],
+    order: ['order', 'orderItem'],
+  },
+}
+```
+
+| 操作 | ルール |
+|---|---|
+| 書き込み | 所有domainのstoreからだけ行う。他domainのテーブルへの書き込みは禁止 |
+| 読み取り | 所有domainのstoreの関数を、依存宣言（DAG）に沿って呼ぶ。他domainのテーブルを直接読まない |
+| 複数domainのテーブルを組み合わせる表示 | 各domainの `find*ByIds` で一括取得し、メモリ上で突き合わせる。それでも重い・複雑なら、Lv10で読み取り側（`query/`）に越境JOINを許す合図 |
+
+- 1つのテーブルを所有するdomainは1つだけ。複数のdomainが同じテーブルを所有宣言したら、domainの切り方を見直す合図
+- 所有が宣言されていないテーブルは `shared/store.ts`（ドメイン未分化の一時置き場）から扱う。domainのstoreが未宣言のテーブルに触れたら、所有の宣言を促す
+- テーブルの所有を決めるのはdomainの名前と境界を決めるのと同じく、AIが提案し人間が裁可する
+- ここで決めるのはテーブルとdomainの対応だけで、テーブル設計そのもの（正規化・インデックス・型・命名）は扱わない（「[スコープ外：DB設計](#スコープ外db設計)」参照）
+
 #### app/ の役割
 
 | ファイル | やること | やらないこと |
@@ -778,6 +810,10 @@ export const userRoutes = (r: Router) => {
 - `domains/`・`orchestrate/` 直下のフォルダ名がkebab-caseでない → ⚠️ Warning
 - 依存宣言にないdomain間のimport → ❌ Error
 - domain間の依存宣言に循環がある → ❌ Error
+- domainのstoreが、他domainの所有するテーブルに書き込んでいる → ❌ Error
+- domainのstoreが、他domainの所有するテーブルを直接読んでいる（所有domainの関数を経由する。Lv10の読み取り側アダプターは除く） → ⚠️ Warning
+- 1つのテーブルを複数のdomainが所有宣言している → ❌ Error
+- domainのstoreが、所有の宣言されていないテーブルに触れている（`slime.config.ts` の `tables` に宣言する） → 💡 Hint
 - `client/client.ts` を直接importしている（`client/adapter.ts` を経由していない） → ❌ Error
 - domainのエラーコードにdomain名の接頭辞がない（`domains/user` なら `USER_*`） → ⚠️ Warning
 - `shared/` がdomainフォルダをimportしている → ⚠️ Warning
@@ -806,6 +842,7 @@ export const userRoutes = (r: Router) => {
 - `domains/xxx/parse.ts`：parseをdomainへ移動（`app/parse.ts`は共有スキーマのみ）
 - store命名規則違反がErrorに昇格（Lv4の推奨 → Lv6の強制）
 - ドメイン間の依存をDAGとして宣言（多くのdomainが使う能力は最上流のdomainとして扱う）
+- テーブルの所有domainを宣言（書き込みは所有domainのstoreからだけ。読み取りも所有domainの関数を経由する）
 
 ---
 
@@ -1192,6 +1229,7 @@ export type UserPort = {
 ```
 
 - 読み取り関数の形（IDで引く一括版・一意キー・`filter` での絞り込み）はLv4のstore.tsと同じ。`UserFilter` はPortと一緒にdomain側で定義する
+- テーブルの所有権（Lv6）は `infrastructure/<domain>/` のアダプターに適用される。アダプターが触れてよいのは、そのdomainが所有するテーブルだけ
 
 #### infrastructure/ — Portを実装する唯一の場所
 
@@ -1375,6 +1413,7 @@ block-beta
 - 読み取り最適化のデータ構造（非正規化・ビューモデル）を返してよい
 - 書き込みモデルと同じ形状に縛られない
 - 一覧・検索は `list(filter, page)` にまとめ、`filter` に収まらない画面専用の取得は用途名の関数（`listForDashboard` 等）にする。用途名の関数どうしが少し似ているのは許容する
+- **読み取り側のアダプターに限り、他domainが所有するテーブルとの越境JOINを許可する**（テーブルの所有権の例外）。書き込み側のアダプターは引き続き所有テーブルだけを触る
 - イベントの発行禁止（副作用ゼロ）
 
 #### routes.ts — command/queryを束ねる
@@ -1501,6 +1540,23 @@ AIが書いた文書・コメント・コードの識別子に載っているだ
 
 ---
 
+## スコープ外：DB設計
+
+Slime Architectureが扱うのは**アプリコードをどこにどう書くか**であり、DB設計論そのもの（テーブル設計・正規化・インデックス・カラムの型・命名）は扱わない。これらは既存の文献が十分にあり、RDBMSの種類やデータ量に強く依存するため、Lvや静的検査と相性が悪い。
+
+扱うのは、アプリとDBの境界だけだ。
+
+| 扱う | 場所 |
+|---|---|
+| DBアクセスをどこに閉じ込めるか（ORM型を外に出さない・読み取り関数の形） | Lv4 store.ts / Lv9 ports |
+| どのdomainがどのテーブルを所有するか | Lv6 テーブルの所有権 |
+| 読み取り用の非正規化モデルを許すか | Lv10 query/ |
+| アプリの都合で必要になるテーブル（Outbox・処理済み記録） | [非同期・キュー導入 設計方針](./非同期・キュー導入%20設計方針.md) |
+
+インデックス不足やN+1が実際に起きているかの判定も静的には行わず、Slime FWの実行時計測に委ねる。
+
+---
+
 ## 全Lv対照表
 
 | Lv | 主要ファイル/フォルダ | 主なテーマ |
@@ -1555,6 +1611,10 @@ AIが書いた文書・コメント・コードの識別子に載っているだ
 | `folder-name-not-kebab-case` | `domains/`・`orchestrate/` 直下のフォルダ名がkebab-caseでない | — | — | — | — | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
 | `domain-undeclared-import` | 依存宣言にないdomain間のimport | — | — | — | — | ❌ | ❌ | ❌ | ❌ | ❌ |
 | `domain-dependency-cycle` | domain間の依存宣言に循環がある | — | — | — | — | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `table-foreign-write` | domainのstoreが、他domainの所有するテーブルに書き込んでいる | — | — | — | — | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `table-foreign-read` | domainのstoreが、他domainの所有するテーブルを直接読んでいる（所有domainの関数を経由する。Lv10の読み取り側アダプターは除く） | — | — | — | — | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
+| `table-owner-duplicate` | 1つのテーブルを複数のdomainが所有宣言している | — | — | — | — | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `table-owner-undeclared` | domainのstoreが、所有の宣言されていないテーブルに触れている（`slime.config.ts` の `tables` に宣言する） | — | — | — | — | 💡 | 💡 | 💡 | 💡 | 💡 |
 | `client-direct-import` | `client/client.ts` を直接importしている（`client/adapter.ts` を経由していない） | — | — | — | — | ❌ | ❌ | ❌ | ❌ | ❌ |
 | `error-code-missing-prefix` | domainのエラーコードにdomain名の接頭辞がない（`domains/user` なら `USER_*`） | — | — | — | — | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
 | `shared-imports-domain` | `shared/` がdomainフォルダをimportしている | — | — | — | — | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |

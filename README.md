@@ -5,6 +5,8 @@
 
 Kaachan（静的解析ツール）と Slime FW（Webフレームワーク）の双方が、このパッケージを唯一の参照元（Single Source of Truth）として利用することで、ルール定義の二重管理を防ぎます。
 
+Slime Architecture が扱うのは**アプリコードをどこにどう書くか**です。DB設計論（テーブル設計・正規化・インデックス・カラムの型・命名）は対象外で、扱うのはアプリとDBの境界（DBアクセスの閉じ込め方・テーブルの所有domain）だけです。性能・非同期・信頼性もLvとは別の軸として扱います（[非同期・キュー導入 設計方針](./docs/ja/非同期・キュー導入%20設計方針.md)）。
+
 ## インストール
 
 ```bash
@@ -119,6 +121,20 @@ const domains: DomainDependencies = {
   auth: [],                            // 最上流：どのドメインにも依存しない
   user: ["auth"],
   order: ["auth", "user"],
+}
+```
+
+### `TableOwnership`
+
+テーブルの所有宣言（Lv6以降）の型。キーはドメイン、値はそのドメインが所有するテーブル（ORMのモデル名）です。他ドメインの所有するテーブルへの書き込みと、同じテーブルの重複した所有宣言は Kaachan が Error として検出します。
+
+```ts
+import type { TableOwnership } from "@u83ism/architecture-rules"
+
+const tables: TableOwnership = {
+  auth: ["session"],
+  user: ["user", "userProfile"],
+  order: ["order", "orderItem"],
 }
 ```
 
