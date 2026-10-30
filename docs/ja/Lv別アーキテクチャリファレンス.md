@@ -845,6 +845,8 @@ orchestrate/は、App層に集中する「複数domainをまたぐ調整」を�
 | `withTransaction()` 外 | メイン処理完了後にin-processで即実行 |
 | 重い処理・信頼性が必要なもの | Queue（別プロセス）に委ねる |
 
+> キュー導入時の投入の確実性（Outbox）・冪等性・リトライの判断はLvと独立した軸として扱う。→ [非同期・キュー導入 設計方針](./非同期・キュー導入%20設計方針.md)
+
 ```ts
 // トランザクション内でのdefer() — コミット後にメール送信
 return withTransaction(async () => {

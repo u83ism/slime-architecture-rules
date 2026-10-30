@@ -175,6 +175,7 @@ Slime Architecture を実装するプロジェクトは複数あります。
 | [Kaachan設計仕様.md](./docs/ja/Kaachan設計仕様.md) | Kaachan の実装詳細（Fat Logic検出戦略・Fat Parse問題など） |
 | [Slime FW詳細設計.md](./docs/ja/Slime%20FW詳細設計.md) | Slime FW の実装詳細（メトリクス自動計装・OTel連携など） |
 | [AI-rulesテンプレート 設計方針.md](./docs/ja/AI-rulesテンプレート%20設計方針.md) | AI向け rules テンプレートの仕組みと使い方 |
+| [非同期・キュー導入 設計方針.md](./docs/ja/非同期・キュー導入%20設計方針.md) | Lvとは別軸の「負荷・信頼性」の扱い。キュー導入（Outbox・冪等性・リトライ）とパフォーマンス対策、能力（capability）軸の検査案 |
 
 ## 開発用コマンド
 
