@@ -372,6 +372,7 @@ block-beta
 
 - **ORM型（`Prisma.User`等）を戻り値に使わない** → 自前の純粋なデータ型のみ返す
 - 複数storeをまたぐトランザクションは `withTransaction()` 経由（WorkflowにORM固有のトランザクションAPIを直書きしない）
+- **複数件を取るときは一括取得の関数を用意する**（`findUsersByIds(ids)` 等）。上の層がループの中でstoreを呼ぶとN+1になる。ループ回数は静的には分からないので、Kaachanは提案（Hint）にとどめ、実際にN+1が起きているかはSlime FWの実行時計測で判定する
 
 ```ts
 // store.ts — ORM型を外に出さない
@@ -392,6 +393,16 @@ export const chargePayment = async (amount: number): Promise<Result<Receipt, "PA
     throw e  // TechnicalError → 500
   }
 }
+
+// store.ts — 複数件は一括で取る（N+1を避ける）
+export const findUsersByIds = async (ids: readonly string[]): Promise<User[]> => {
+  const rs = await prisma.user.findMany({ where: { id: { in: [...ids] } } })
+  return rs.map((r) => ({ id: r.id, name: r.name, email: r.email }))
+}
+
+// workflow.ts — ループの中でstoreを呼ばず、一括で取ってメモリ上で突き合わせる
+const users = await findUsersByIds(orders.map((o) => o.userId))
+const userById = new Map(users.map((u) => [u.id, u]))
 
 // workflow.ts — トランザクションはwithTransaction()経由
 await withTransaction(async () => {
@@ -415,6 +426,7 @@ await withTransaction(async () => {
 - workflow がORM固有のトランザクションAPIを直書きしている（`withTransaction()` を使う） → ⚠️ Warning
 - store の関数名が命名規則（`find*` / `list*` / `get*` / `count*` / `search*` / `create*` / `save*` / `update*` / `delete*` / `remove*`）に違反している → 💡 Hint
 - store がORM型を戻り値に使っている → ⚠️ Warning
+- store の関数をループ（`for` / `forEach` / `map` 等）の中で呼んでいる（N+1になりうる。一括取得の関数を store に用意する） → 💡 Hint
 - Lv3までの検査はすべて継続する
 <!-- END GENERATED -->
 
@@ -1483,6 +1495,7 @@ AIが書いた文書・コメント・コードの識別子に載っているだ
 | `workflow-orm-transaction` | workflow がORM固有のトランザクションAPIを直書きしている（`withTransaction()` を使う） | — | — | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
 | `store-naming` | store の関数名が命名規則（`find*` / `list*` / `get*` / `count*` / `search*` / `create*` / `save*` / `update*` / `delete*` / `remove*`）に違反している | — | — | 💡 | 💡 | ❌ | ❌ | ❌ | ❌ | ❌ |
 | `store-orm-return-type` | store がORM型を戻り値に使っている | — | — | ⚠️ | ⚠️ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `store-call-in-loop` | store の関数をループ（`for` / `forEach` / `map` 等）の中で呼んでいる（N+1になりうる。一括取得の関数を store に用意する） | — | — | 💡 | 💡 | 💡 | 💡 | 💡 | 💡 | 💡 |
 | `logic-store-client-import` | logic が store / client / DB・ORMモジュールをimportしている | — | — | — | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | `logic-throws` | logic が throw している（Result型で返す） | — | — | — | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | `logic-missing-prefix` | logic関数にドメインprefixがない（`userCan*` 等） | — | — | — | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |

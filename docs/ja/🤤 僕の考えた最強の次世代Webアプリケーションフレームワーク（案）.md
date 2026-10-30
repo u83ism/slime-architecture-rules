@@ -227,6 +227,7 @@ return slime.withTransaction(async () => {
 - workflow がORM固有のトランザクションAPIを直書きしている（`withTransaction()` を使う） → ⚠️ Warning
 - store の関数名が命名規則（`find*` / `list*` / `get*` / `count*` / `search*` / `create*` / `save*` / `update*` / `delete*` / `remove*`）に違反している → 💡 Hint
 - store がORM型を戻り値に使っている → ⚠️ Warning
+- store の関数をループ（`for` / `forEach` / `map` 等）の中で呼んでいる（N+1になりうる。一括取得の関数を store に用意する） → 💡 Hint
 - Lv3までの検査はすべて継続する
 <!-- END GENERATED -->
 

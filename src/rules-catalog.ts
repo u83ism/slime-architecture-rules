@@ -174,6 +174,14 @@ export const RULE_CATALOG: readonly RuleDefinition[] = [
     },
     severity: [[4, "warning"], [6, "error"]],
   },
+  {
+    id: "store-call-in-loop",
+    summary: {
+      ja: "store の関数をループ（`for` / `forEach` / `map` 等）の中で呼んでいる（N+1になりうる。一括取得の関数を store に用意する）",
+      en: "A store function is called inside a loop (`for` / `forEach` / `map`, etc.), which can cause N+1 queries (add a batch function to the store)",
+    },
+    severity: [[4, "hint"]],
+  },
 
   // ---- Lv5: logic ----
   {
