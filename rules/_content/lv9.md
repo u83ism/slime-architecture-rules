@@ -63,11 +63,13 @@ src/
 // domains/user/ports.ts
 export type UserPort = {
   findByEmail: (email: string) => Promise<User | null>
-  findById: (id: string) => Promise<User | null>
+  findByIds: (ids: readonly string[]) => Promise<Map<string, User>>
+  list: (filter: UserFilter, page: Page) => Promise<User[]>
   save: (user: NewUser) => Promise<User>
-  listActive: () => Promise<User[]>
 }
 ```
+
+- Port read functions keep the three shapes from Lv4: by ID (`findByIds` returning a `Map`, primary), unique key / lock, and `list(filter, page)` with a closed business-vocabulary filter type defined on the domain side next to the port. Ports never expose ORM query types.
 
 ### infrastructure/
 
@@ -84,12 +86,12 @@ import { UserPort } from '../../domains/user/ports'
 export const prismaUserPort: UserPort = {
   findByEmail: (email) => prisma.user.findUnique({ where: { email } })
     .then(r => r ? { id: r.id, name: r.name, email: r.email } : null),
-  findById: (id) => prisma.user.findUnique({ where: { id } })
-    .then(r => r ? { id: r.id, name: r.name, email: r.email } : null),
+  findByIds: (ids) => prisma.user.findMany({ where: { id: { in: [...ids] } } })
+    .then(rs => new Map(rs.map(r => [r.id, { id: r.id, name: r.name, email: r.email }]))),
+  list: (filter, page) => prisma.user.findMany({ where: toWhere(filter), ...toPaging(page) })
+    .then(rs => rs.map(r => ({ id: r.id, name: r.name, email: r.email }))),
   save: (user) => prisma.user.create({ data: user })
     .then(r => ({ id: r.id, name: r.name, email: r.email })),
-  listActive: () => prisma.user.findMany({ where: { status: 'active' } })
-    .then(rs => rs.map(r => ({ id: r.id, name: r.name, email: r.email }))),
 }
 ```
 
@@ -215,6 +217,7 @@ Severity: 💡 Hint = information, ⚠️ Warning = likely problem, ❌ Error = 
 - ❌ Error — A workflow imports an ORM/DB module directly
 - ❌ Error — A store function name violates the naming convention (`find*` / `list*` / `get*` / `count*` / `search*` / `create*` / `save*` / `update*` / `delete*` / `remove*`)
 - ❌ Error — A store function returns an ORM type
+- ❌ Error — A store function takes an ORM type or query builder as a parameter (lets callers build queries outside the store)
 - ❌ Error — logic imports store, client, or a DB/ORM module
 - ❌ Error — logic throws (return a `Result` instead)
 - ❌ Error — logic has no corresponding test file (`logic.test.ts`)
@@ -266,6 +269,7 @@ Severity: 💡 Hint = information, ⚠️ Warning = likely problem, ❌ Error = 
 - 💡 Hint — A workflow calls a parse function (parsing belongs in route)
 - 💡 Hint — `slime.config.ts` is missing (it maps error codes to HTTP status codes)
 - 💡 Hint — `parse.ts` exceeds ~300 lines or ~10 functions (shared schemas are allowed)
+- 💡 Hint — A store filter uses a generic shape such as `{ column, op, value }` (use a closed type in business vocabulary)
 - 💡 Hint — A store function is called inside a loop (`for` / `forEach` / `map`, etc.), which can cause N+1 queries (add a batch function to the store)
 - 💡 Hint — `logic.ts` exceeds ~300 lines or ~10 functions (consider splitting into `logic/`)
 - 💡 Hint — A workflow is not referenced by any route (unreachable workflow candidate)

@@ -227,6 +227,8 @@ return slime.withTransaction(async () => {
 - workflow がORM固有のトランザクションAPIを直書きしている（`withTransaction()` を使う） → ⚠️ Warning
 - store の関数名が命名規則（`find*` / `list*` / `get*` / `count*` / `search*` / `create*` / `save*` / `update*` / `delete*` / `remove*`）に違反している → 💡 Hint
 - store がORM型を戻り値に使っている → ⚠️ Warning
+- store がORM型やクエリビルダーを引数に取っている（storeの外でクエリを組み立てられてしまう） → ⚠️ Warning
+- store の絞り込み条件が `{ column, op, value }` のような汎用の形になっている（業務の言葉の閉じた型にする） → 💡 Hint
 - store の関数をループ（`for` / `forEach` / `map` 等）の中で呼んでいる（N+1になりうる。一括取得の関数を store に用意する） → 💡 Hint
 - Lv3までの検査はすべて継続する
 <!-- END GENERATED -->
@@ -287,6 +289,7 @@ Slimeが自動カバーする範囲：Parse失敗→400 / Middleware拒否→401
 <!-- BEGIN GENERATED: kaachan-checks lv=6 （src/rules-catalog.ts から自動生成。手で編集しない） -->
 - store の関数名が命名規則（`find*` / `list*` / `get*` / `count*` / `search*` / `create*` / `save*` / `update*` / `delete*` / `remove*`）に違反している → ❌ Error（Lv5の💡 Hintから変更）
 - store がORM型を戻り値に使っている → ❌ Error（Lv5の⚠️ Warningから変更）
+- store がORM型やクエリビルダーを引数に取っている（storeの外でクエリを組み立てられてしまう） → ❌ Error（Lv5の⚠️ Warningから変更）
 - workflow が `DomainError` を投げている（Lv5以降は `err()` でrouteまで返す） → ⚠️ Warning（Lv5の💡 Hintから変更）
 - `domains/`・`orchestrate/` 直下のフォルダ名がkebab-caseでない → ⚠️ Warning
 - 依存宣言にないdomain間のimport → ❌ Error

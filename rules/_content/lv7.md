@@ -133,7 +133,7 @@ export const UpdateProfileWorkflow = async (input: ValidatedInput) => {
 - `workflow.ts`: receives parsed input and the principal — calls store/logic and `client/adapter.ts` — never imports ORM directly, never touches HTTP objects.
 - `logic.ts`: pure functions with domain-prefixed names, `Result` for fallible operations. Decides resource-level authorization from the principal and the loaded resource.
 - `logic.test.ts`: **mandatory** — missing test file is a ❌ Error at Lv7.
-- `store.ts`: `find*` / `list*` / `get*` / `count*` / `search*` / `create*` / `save*` / `update*` / `delete*` / `remove*` naming; no ORM types in return values.
+- `store.ts`: `find*` / `list*` / `get*` / `count*` / `search*` / `create*` / `save*` / `update*` / `delete*` / `remove*` naming; no ORM types in return values or parameters. Read functions take three shapes: by ID (`find*ByIds` returning a `Map`), unique key / lock, and `list*(filter, page)` with a closed filter type. Never call the store inside a loop.
 
 ---
 
@@ -208,6 +208,7 @@ Severity: 💡 Hint = information, ⚠️ Warning = likely problem, ❌ Error = 
 - ❌ Error — A workflow imports an ORM/DB module directly
 - ❌ Error — A store function name violates the naming convention (`find*` / `list*` / `get*` / `count*` / `search*` / `create*` / `save*` / `update*` / `delete*` / `remove*`)
 - ❌ Error — A store function returns an ORM type
+- ❌ Error — A store function takes an ORM type or query builder as a parameter (lets callers build queries outside the store)
 - ❌ Error — logic imports store, client, or a DB/ORM module
 - ❌ Error — logic throws (return a `Result` instead)
 - ❌ Error — logic has no corresponding test file (`logic.test.ts`)
@@ -247,6 +248,7 @@ Severity: 💡 Hint = information, ⚠️ Warning = likely problem, ❌ Error = 
 - 💡 Hint — A workflow calls a parse function (parsing belongs in route)
 - 💡 Hint — `slime.config.ts` is missing (it maps error codes to HTTP status codes)
 - 💡 Hint — `parse.ts` exceeds ~300 lines or ~10 functions (shared schemas are allowed)
+- 💡 Hint — A store filter uses a generic shape such as `{ column, op, value }` (use a closed type in business vocabulary)
 - 💡 Hint — A store function is called inside a loop (`for` / `forEach` / `map`, etc.), which can cause N+1 queries (add a batch function to the store)
 - 💡 Hint — `logic.ts` exceeds ~300 lines or ~10 functions (consider splitting into `logic/`)
 - 💡 Hint — A workflow is not referenced by any route (unreachable workflow candidate)

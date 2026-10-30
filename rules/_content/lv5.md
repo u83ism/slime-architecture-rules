@@ -96,6 +96,15 @@ if (exists) throw new Error('USER_ALREADY_EXISTS')  // belongs in logic.ts
   - Writes: `create*` / `save*` / `update*` / `delete*` / `remove*`
 - Must not contain business logic — only data access.
 - Must not return ORM types (`Prisma.User`, etc.) — return only plain domain types.
+- **Read functions come in three shapes only** — do not add a new `findByXxx` for every slightly different condition, and do not accept free-form query conditions:
+  1. **By ID**: `find*ByIds(ids): Promise<Map<id, T>>` is the primary form. Write the SQL only here; a single-item version may be derived from it. Return a `Map` (results are unordered and may be missing items), and handle empty input and `IN` parameter limits inside it.
+  2. **Unique key / lock**: e.g. `findUserByEmail(email)`, or a row-locking read — reads that are inherently one item.
+  3. **Filtering**: `list*(filter, page)`, where `filter` is a closed type defined by the store in business terms. When a new condition is needed, add a field to the type — not a new function.
+- Filter conditions use business vocabulary (`{ status: "active", joinedAfter }`), never a generic `{ column, op, value }` shape. Sort order is an enumerated choice (`"joinedAt" | "name"`), not an arbitrary string.
+- **Must not accept ORM types or query builders as parameters** (`Prisma.UserWhereInput`, etc.) — that lets callers build queries outside the store.
+- Business thresholds (e.g., "within 30 days") are computed in logic and passed as filter values, never hard-coded in the store.
+- Screen-specific reads with joins or aggregation that do not fit `filter` get a purpose-named function (`listOrdersForDashboard`). Slight similarity between purpose-named functions is acceptable — they are deleted together with their screen.
+- **Callers must not call the store inside a loop** (N+1). Fetch in bulk with `find*ByIds` and join in memory.
 
 ### client.ts
 - All external API calls live here. Workflows must not use `fetch`/axios directly.
@@ -217,6 +226,7 @@ Severity: 💡 Hint = information, ⚠️ Warning = likely problem, ❌ Error = 
 - ⚠️ Warning — `parse.ts` exceeds ~500 lines (split into `parse/`)
 - ⚠️ Warning — A workflow calls an ORM-specific transaction API directly (use `withTransaction()`)
 - ⚠️ Warning — A store function returns an ORM type
+- ⚠️ Warning — A store function takes an ORM type or query builder as a parameter (lets callers build queries outside the store)
 - ⚠️ Warning — A logic function has no domain prefix (`userCan*`, etc.)
 - ⚠️ Warning — logic has no corresponding test file (`logic.test.ts`)
 - ⚠️ Warning — `logic.ts` exceeds ~500 lines, mixes domain prefixes, or contains function groups whose type dependencies do not intersect
@@ -226,6 +236,7 @@ Severity: 💡 Hint = information, ⚠️ Warning = likely problem, ❌ Error = 
 - 💡 Hint — `slime.config.ts` is missing (it maps error codes to HTTP status codes)
 - 💡 Hint — `parse.ts` exceeds ~300 lines or ~10 functions (shared schemas are allowed)
 - 💡 Hint — A store function name violates the naming convention (`find*` / `list*` / `get*` / `count*` / `search*` / `create*` / `save*` / `update*` / `delete*` / `remove*`)
+- 💡 Hint — A store filter uses a generic shape such as `{ column, op, value }` (use a closed type in business vocabulary)
 - 💡 Hint — A store function is called inside a loop (`for` / `forEach` / `map`, etc.), which can cause N+1 queries (add a batch function to the store)
 - 💡 Hint — `logic.ts` exceeds ~300 lines or ~10 functions (consider splitting into `logic/`)
 - 💡 Hint — A workflow throws a `DomainError` (from Lv5, return `err()` up to the route instead)

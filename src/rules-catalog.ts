@@ -175,6 +175,22 @@ export const RULE_CATALOG: readonly RuleDefinition[] = [
     severity: [[4, "warning"], [6, "error"]],
   },
   {
+    id: "store-orm-param",
+    summary: {
+      ja: "store がORM型やクエリビルダーを引数に取っている（storeの外でクエリを組み立てられてしまう）",
+      en: "A store function takes an ORM type or query builder as a parameter (lets callers build queries outside the store)",
+    },
+    severity: [[4, "warning"], [6, "error"]],
+  },
+  {
+    id: "store-generic-filter",
+    summary: {
+      ja: "store の絞り込み条件が `{ column, op, value }` のような汎用の形になっている（業務の言葉の閉じた型にする）",
+      en: "A store filter uses a generic shape such as `{ column, op, value }` (use a closed type in business vocabulary)",
+    },
+    severity: [[4, "hint"]],
+  },
+  {
     id: "store-call-in-loop",
     summary: {
       ja: "store の関数をループ（`for` / `forEach` / `map` 等）の中で呼んでいる（N+1になりうる。一括取得の関数を store に用意する）",

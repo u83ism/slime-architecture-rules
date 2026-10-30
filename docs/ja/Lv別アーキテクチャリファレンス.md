@@ -370,19 +370,62 @@ block-beta
 
 #### store.ts の重要制約
 
-- **ORM型（`Prisma.User`等）を戻り値に使わない** → 自前の純粋なデータ型のみ返す
+- **ORM型（`Prisma.User`等）を戻り値にも引数にも使わない** → 自前の純粋なデータ型のみ返し、ORMの `where` 型やQueryBuilderを引数で受けない
 - 複数storeをまたぐトランザクションは `withTransaction()` 経由（WorkflowにORM固有のトランザクションAPIを直書きしない）
-- **複数件を取るときは一括取得の関数を用意する**（`findUsersByIds(ids)` 等）。上の層がループの中でstoreを呼ぶとN+1になる。ループ回数は静的には分からないので、Kaachanは提案（Hint）にとどめ、実際にN+1が起きているかはSlime FWの実行時計測で判定する
+
+#### store.ts の読み取り関数の形
+
+条件ごとに `findByXxx` を足していくと、少しずつ違う関数が乱立する。逆に条件を自由に渡せるようにすると、storeの外で生SQLを書いているのと変わらなくなる。読み取り関数は次の3種類に限る。
+
+| 種類 | 形 | 用途 |
+|---|---|---|
+| **IDで引く** | `find*ByIds(ids): Promise<Map<id, T>>`（一括版が正）。単体版は一括版から派生させてよい | 更新対象や関連先を取る |
+| **一意キー・ロック** | `findUserByEmail(email)`、行ロック付きの取得など | 本質的に1件しかない取得 |
+| **絞り込み** | `list*(filter, page)`。`filter` はstoreが定義した閉じた型 | 一覧・検索。条件が増えたら型にフィールドを足す（関数を足さない） |
+
+- **一括版を正とする**：他のエンティティから参照されるIDで引く取得は、一括版を先に作る。SQLは一括版にだけ書き、単体版は `(await findUsersByIds([id])).get(id) ?? null` のように派生させる。戻り値は順序が保証されず欠けもあるので、配列ではなく `Map` で返す。空配列と件数上限（`IN` のパラメータ数）の扱いも一括版の中で吸収する
+- **上の層はループの中でstoreを呼ばない**：一括で取ってメモリ上で突き合わせる。ループ回数は静的には分からないので、Kaachanは提案（Hint）にとどめ、実際にN+1が起きているかはSlime FWの実行時計測で判定する
+- **絞り込みの条件は業務の言葉で書く**：`{ status: "active", joinedAfter }` はOK、`{ column: "status", op: "=", value }` のような汎用の形はNG。並び順も `"joinedAt" | "name"` のように選択肢で列挙する。どの条件で絞れるかをstoreが型で決めている限り、それはクエリビルダーではなくstoreのAPIだ
+- 業務上のしきい値（「30日以内」等）はlogicで計算し、`filter` の値として渡す。storeに直書きしない
+- 特定画面専用のJOIN・集計のように `filter` に収まらない取得は、用途名の関数にする（`listOrdersForDashboard` 等）。用途名の関数どうしが少し似ているのは許容する（画面と一緒に消せる）。Lv10ではこれを `query/` 側に分離する
 
 ```ts
 // store.ts — ORM型を外に出さない
 type User = { id: string; name: string; email: string }  // 自前の型
 
+const toUser = (r: { id: string; name: string; email: string }): User => ({ id: r.id, name: r.name, email: r.email })  // 純粋な型で返す
+
+// 一意キー
 export const findUserByEmail = async (email: string): Promise<User | null> => {
   const r = await prisma.user.findUnique({ where: { email } })
-  if (!r) return null
-  return { id: r.id, name: r.name, email: r.email }  // 純粋な型で返す
+  return r ? toUser(r) : null
 }
+
+// IDで引く — 一括版が正。SQLはここにだけ書く
+export const findUsersByIds = async (ids: readonly string[]): Promise<Map<string, User>> => {
+  if (ids.length === 0) return new Map()
+  const rs = await prisma.user.findMany({ where: { id: { in: [...new Set(ids)] } } })
+  return new Map(rs.map((r) => [r.id, toUser(r)]))
+}
+
+// 単体版は一括版から派生させる
+export const findUserById = async (id: string): Promise<User | null> =>
+  (await findUsersByIds([id])).get(id) ?? null
+
+// 絞り込み — 条件はstoreが定義した閉じた型。条件が増えたらフィールドを足す
+export type UserFilter = {
+  status?: "active" | "suspended"
+  tenantId?: string
+  joinedAfter?: Date      // 「30日以内」等のしきい値はlogicで日付に直して渡す
+  keyword?: string
+}
+export const listUsers = async (
+  filter: UserFilter,
+  page: { limit: number; cursor?: string; orderBy?: "joinedAt" | "name" },
+): Promise<User[]> => { /* filter を where に組み立てる */ }
+
+// NG — ORMの型を引数で受ける（storeの外でクエリを組み立てられてしまう）
+export const listUsersWhere = async (where: Prisma.UserWhereInput) => ...
 
 // client.ts — 外部エラーをドメインエラーに変換
 export const chargePayment = async (amount: number): Promise<Result<Receipt, "PAYMENT_DECLINED">> => {
@@ -394,15 +437,9 @@ export const chargePayment = async (amount: number): Promise<Result<Receipt, "PA
   }
 }
 
-// store.ts — 複数件は一括で取る（N+1を避ける）
-export const findUsersByIds = async (ids: readonly string[]): Promise<User[]> => {
-  const rs = await prisma.user.findMany({ where: { id: { in: [...ids] } } })
-  return rs.map((r) => ({ id: r.id, name: r.name, email: r.email }))
-}
-
 // workflow.ts — ループの中でstoreを呼ばず、一括で取ってメモリ上で突き合わせる
-const users = await findUsersByIds(orders.map((o) => o.userId))
-const userById = new Map(users.map((u) => [u.id, u]))
+const userById = await findUsersByIds(orders.map((o) => o.userId))
+const rows = orders.map((o) => ({ ...o, user: userById.get(o.userId) }))
 
 // workflow.ts — トランザクションはwithTransaction()経由
 await withTransaction(async () => {
@@ -426,6 +463,8 @@ await withTransaction(async () => {
 - workflow がORM固有のトランザクションAPIを直書きしている（`withTransaction()` を使う） → ⚠️ Warning
 - store の関数名が命名規則（`find*` / `list*` / `get*` / `count*` / `search*` / `create*` / `save*` / `update*` / `delete*` / `remove*`）に違反している → 💡 Hint
 - store がORM型を戻り値に使っている → ⚠️ Warning
+- store がORM型やクエリビルダーを引数に取っている（storeの外でクエリを組み立てられてしまう） → ⚠️ Warning
+- store の絞り込み条件が `{ column, op, value }` のような汎用の形になっている（業務の言葉の閉じた型にする） → 💡 Hint
 - store の関数をループ（`for` / `forEach` / `map` 等）の中で呼んでいる（N+1になりうる。一括取得の関数を store に用意する） → 💡 Hint
 - Lv3までの検査はすべて継続する
 <!-- END GENERATED -->
@@ -734,6 +773,7 @@ export const userRoutes = (r: Router) => {
 <!-- BEGIN GENERATED: kaachan-checks lv=6 （src/rules-catalog.ts から自動生成。手で編集しない） -->
 - store の関数名が命名規則（`find*` / `list*` / `get*` / `count*` / `search*` / `create*` / `save*` / `update*` / `delete*` / `remove*`）に違反している → ❌ Error（Lv5の💡 Hintから変更）
 - store がORM型を戻り値に使っている → ❌ Error（Lv5の⚠️ Warningから変更）
+- store がORM型やクエリビルダーを引数に取っている（storeの外でクエリを組み立てられてしまう） → ❌ Error（Lv5の⚠️ Warningから変更）
 - workflow が `DomainError` を投げている（Lv5以降は `err()` でrouteまで返す） → ⚠️ Warning（Lv5の💡 Hintから変更）
 - `domains/`・`orchestrate/` 直下のフォルダ名がkebab-caseでない → ⚠️ Warning
 - 依存宣言にないdomain間のimport → ❌ Error
@@ -1145,11 +1185,13 @@ block-beta
 // domains/user/ports.ts
 export type UserPort = {
   findByEmail: (email: string) => Promise<User | null>
-  findById: (id: string) => Promise<User | null>
+  findByIds: (ids: readonly string[]) => Promise<Map<string, User>>
+  list: (filter: UserFilter, page: Page) => Promise<User[]>
   save: (user: NewUser) => Promise<User>
-  listActive: () => Promise<User[]>
 }
 ```
+
+- 読み取り関数の形（IDで引く一括版・一意キー・`filter` での絞り込み）はLv4のstore.tsと同じ。`UserFilter` はPortと一緒にdomain側で定義する
 
 #### infrastructure/ — Portを実装する唯一の場所
 
@@ -1332,6 +1374,7 @@ block-beta
 
 - 読み取り最適化のデータ構造（非正規化・ビューモデル）を返してよい
 - 書き込みモデルと同じ形状に縛られない
+- 一覧・検索は `list(filter, page)` にまとめ、`filter` に収まらない画面専用の取得は用途名の関数（`listForDashboard` 等）にする。用途名の関数どうしが少し似ているのは許容する
 - イベントの発行禁止（副作用ゼロ）
 
 #### routes.ts — command/queryを束ねる
@@ -1362,8 +1405,11 @@ export const userCommandAdapter: UserWritePort = {
 
 // infrastructure/user/queryAdapter.ts — 読み取り最適化
 export const userQueryAdapter: UserReadPort = {
-  findById: (id) => prisma.user.findUnique({ where: { id }, select: viewFields }).then(mapToView),
-  listActive: () => prisma.user.findMany({ where: { status: 'active' } }).then(rs => rs.map(mapToView)),
+  findByIds: (ids) => prisma.user.findMany({ where: { id: { in: [...ids] } }, select: viewFields })
+    .then(rs => new Map(rs.map(r => [r.id, mapToView(r)]))),
+  list: (filter, page) => prisma.user.findMany({ where: toWhere(filter), select: viewFields, ...toPaging(page) })
+    .then(rs => rs.map(mapToView)),
+  listForDashboard: () => /* 画面専用のJOIN・集計。用途名で置く */,
 }
 ```
 
@@ -1495,6 +1541,8 @@ AIが書いた文書・コメント・コードの識別子に載っているだ
 | `workflow-orm-transaction` | workflow がORM固有のトランザクションAPIを直書きしている（`withTransaction()` を使う） | — | — | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
 | `store-naming` | store の関数名が命名規則（`find*` / `list*` / `get*` / `count*` / `search*` / `create*` / `save*` / `update*` / `delete*` / `remove*`）に違反している | — | — | 💡 | 💡 | ❌ | ❌ | ❌ | ❌ | ❌ |
 | `store-orm-return-type` | store がORM型を戻り値に使っている | — | — | ⚠️ | ⚠️ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `store-orm-param` | store がORM型やクエリビルダーを引数に取っている（storeの外でクエリを組み立てられてしまう） | — | — | ⚠️ | ⚠️ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `store-generic-filter` | store の絞り込み条件が `{ column, op, value }` のような汎用の形になっている（業務の言葉の閉じた型にする） | — | — | 💡 | 💡 | 💡 | 💡 | 💡 | 💡 | 💡 |
 | `store-call-in-loop` | store の関数をループ（`for` / `forEach` / `map` 等）の中で呼んでいる（N+1になりうる。一括取得の関数を store に用意する） | — | — | 💡 | 💡 | 💡 | 💡 | 💡 | 💡 | 💡 |
 | `logic-store-client-import` | logic が store / client / DB・ORMモジュールをimportしている | — | — | — | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | `logic-throws` | logic が throw している（Result型で返す） | — | — | — | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |

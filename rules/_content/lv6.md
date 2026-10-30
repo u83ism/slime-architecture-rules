@@ -130,6 +130,8 @@ export const userRoutes = (r: Router) => {
 - Naming convention (now **Error** if violated, up from Hint at Lv5):
   - Reads: `find*` / `list*` / `get*` / `count*` / `search*`
   - Writes: `create*` / `save*` / `update*` / `delete*` / `remove*`
+- Must not accept ORM types or query builders as parameters (now **Error**, up from Warning at Lv5).
+- Read functions keep the three shapes from Lv4: by ID (`find*ByIds` returning a `Map`, primary), unique key / lock, and filtering via `list*(filter, page)` with a closed business-vocabulary filter type. Screen-specific reads get a purpose-named function. Never call the store inside a loop.
 
 ### shared/
 - `shared/utility.ts`: pure utility functions shared across domains (no side effects).
@@ -214,6 +216,7 @@ Severity: 💡 Hint = information, ⚠️ Warning = likely problem, ❌ Error = 
 - ❌ Error — A workflow imports an ORM/DB module directly
 - ❌ Error — A store function name violates the naming convention (`find*` / `list*` / `get*` / `count*` / `search*` / `create*` / `save*` / `update*` / `delete*` / `remove*`)
 - ❌ Error — A store function returns an ORM type
+- ❌ Error — A store function takes an ORM type or query builder as a parameter (lets callers build queries outside the store)
 - ❌ Error — logic imports store, client, or a DB/ORM module
 - ❌ Error — logic throws (return a `Result` instead)
 - ❌ Error — A file in `logic/` exceeds ~300 lines or still mixes domain prefixes
@@ -250,6 +253,7 @@ Severity: 💡 Hint = information, ⚠️ Warning = likely problem, ❌ Error = 
 - 💡 Hint — A workflow calls a parse function (parsing belongs in route)
 - 💡 Hint — `slime.config.ts` is missing (it maps error codes to HTTP status codes)
 - 💡 Hint — `parse.ts` exceeds ~300 lines or ~10 functions (shared schemas are allowed)
+- 💡 Hint — A store filter uses a generic shape such as `{ column, op, value }` (use a closed type in business vocabulary)
 - 💡 Hint — A store function is called inside a loop (`for` / `forEach` / `map`, etc.), which can cause N+1 queries (add a batch function to the store)
 - 💡 Hint — `logic.ts` exceeds ~300 lines or ~10 functions (consider splitting into `logic/`)
 - 💡 Hint — A workflow is not referenced by any route (unreachable workflow candidate)

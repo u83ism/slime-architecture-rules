@@ -93,18 +93,46 @@ await prisma.$transaction(async (tx) => { ... })  // belongs in store.ts or via 
   - Writes: `create*` / `save*` / `update*` / `delete*` / `remove*`
 - Must not contain business logic — only data access.
 - **Must not return ORM types** (`Prisma.User`, Drizzle model types, etc.) — return only plain domain types defined in your own codebase.
+- **Read functions come in three shapes only** — do not add a new `findByXxx` for every slightly different condition, and do not accept free-form query conditions:
+  1. **By ID**: `find*ByIds(ids): Promise<Map<id, T>>` is the primary form. Write the SQL only here; a single-item version may be derived from it. Return a `Map` (results are unordered and may be missing items), and handle empty input and `IN` parameter limits inside it.
+  2. **Unique key / lock**: e.g. `findUserByEmail(email)`, or a row-locking read — reads that are inherently one item.
+  3. **Filtering**: `list*(filter, page)`, where `filter` is a closed type defined by the store in business terms. When a new condition is needed, add a field to the type — not a new function.
+- Filter conditions use business vocabulary (`{ status: "active", joinedAfter }`), never a generic `{ column, op, value }` shape. Sort order is an enumerated choice (`"joinedAt" | "name"`), not an arbitrary string.
+- **Must not accept ORM types or query builders as parameters** (`Prisma.UserWhereInput`, etc.) — that lets callers build queries outside the store.
+- Business thresholds (e.g., "within 30 days") are computed in logic and passed as filter values, never hard-coded in the store.
+- Screen-specific reads with joins or aggregation that do not fit `filter` get a purpose-named function (`listOrdersForDashboard`). Slight similarity between purpose-named functions is acceptable — they are deleted together with their screen.
+- **Callers must not call the store inside a loop** (N+1). Fetch in bulk with `find*ByIds` and join in memory.
 - If `store.ts` grows large, split into a `store/` subdirectory by entity.
 
 ```ts
 // Pure domain type (not an ORM type)
 type User = { id: string; name: string; email: string }
 
-// OK
+const toUser = (r: { id: string; name: string; email: string }): User => ({ id: r.id, name: r.name, email: r.email }) // map to pure type
+
+// OK — unique key
 export const findUserByEmail = async (email: string): Promise<User | null> => {
   const record = await prisma.user.findUnique({ where: { email } })
-  if (!record) return null
-  return { id: record.id, name: record.name, email: record.email } // map to pure type
+  return record ? toUser(record) : null
 }
+
+// OK — by ID: the bulk version is primary; SQL lives only here
+export const findUsersByIds = async (ids: readonly string[]): Promise<Map<string, User>> => {
+  if (ids.length === 0) return new Map()
+  const records = await prisma.user.findMany({ where: { id: { in: [...new Set(ids)] } } })
+  return new Map(records.map((r) => [r.id, toUser(r)]))
+}
+
+// OK — single-item version derived from the bulk version
+export const findUserById = async (id: string): Promise<User | null> =>
+  (await findUsersByIds([id])).get(id) ?? null
+
+// OK — filtering with a closed, business-vocabulary filter type
+export type UserFilter = { status?: "active" | "suspended"; tenantId?: string; joinedAfter?: Date }
+export const listUsers = async (
+  filter: UserFilter,
+  page: { limit: number; cursor?: string; orderBy?: "joinedAt" | "name" },
+): Promise<User[]> => { /* build the where clause from filter */ }
 
 export const saveUser = async (user: { name: string; email: string }): Promise<User> => {
   const record = await prisma.user.create({ data: user })
@@ -118,6 +146,18 @@ export const insertUser = ...       // use save* or create* instead
 // NG — returning ORM type
 export const findUserByEmail = async (email: string): Promise<Prisma.User | null> => ...
 // Prisma.User leaks ORM dependency — return plain { id, name, email } instead
+
+// NG — near-duplicate condition-named functions (add a field to UserFilter instead)
+export const findActiveUsersByTenant = ...
+export const findActiveUsersByTenantOrderByName = ...
+
+// NG — accepting ORM query types (lets callers build queries outside the store)
+export const listUsersWhere = async (where: Prisma.UserWhereInput) => ...
+
+// NG — calling the store inside a loop (N+1)
+for (const order of orders) { order.user = await findUserById(order.userId) }
+// OK — fetch in bulk, join in memory
+const userById = await findUsersByIds(orders.map((o) => o.userId))
 
 // NG — business logic inside store
 export const findActiveUsers = () =>
@@ -206,12 +246,14 @@ Severity: 💡 Hint = information, ⚠️ Warning = likely problem, ❌ Error = 
 - ⚠️ Warning — `parse.ts` exceeds ~500 lines (split into `parse/`)
 - ⚠️ Warning — A workflow calls an ORM-specific transaction API directly (use `withTransaction()`)
 - ⚠️ Warning — A store function returns an ORM type
+- ⚠️ Warning — A store function takes an ORM type or query builder as a parameter (lets callers build queries outside the store)
 - 💡 Hint — API routes are defined outside an `/api` group
 - 💡 Hint — `workflow.ts` exceeds ~300 lines or ~10 functions
 - 💡 Hint — A workflow calls a parse function (parsing belongs in route)
 - 💡 Hint — `slime.config.ts` is missing (it maps error codes to HTTP status codes)
 - 💡 Hint — `parse.ts` exceeds ~300 lines or ~10 functions (shared schemas are allowed)
 - 💡 Hint — A store function name violates the naming convention (`find*` / `list*` / `get*` / `count*` / `search*` / `create*` / `save*` / `update*` / `delete*` / `remove*`)
+- 💡 Hint — A store filter uses a generic shape such as `{ column, op, value }` (use a closed type in business vocabulary)
 - 💡 Hint — A store function is called inside a loop (`for` / `forEach` / `map`, etc.), which can cause N+1 queries (add a batch function to the store)
 <!-- END GENERATED -->
 
