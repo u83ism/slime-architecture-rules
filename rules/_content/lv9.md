@@ -69,7 +69,7 @@ export type UserPort = {
 }
 ```
 
-- Port read functions keep the three shapes from Lv4: by ID (`findByIds` returning a `Map`, primary), unique key / lock, and `list(filter, page)` with a closed business-vocabulary filter type defined on the domain side next to the port. Ports never expose ORM query types.
+- Port read functions keep the four shapes from Lv4: by ID (`findByIds` returning a `Map`, primary), unique key / lock, `list(filter, page)` with a closed business-vocabulary filter type, and `search(query, page)` with closed fields and operators. Filter and query types are defined on the domain side next to the port. Ports never expose ORM query types.
 
 ### infrastructure/
 
@@ -273,7 +273,7 @@ Severity: 💡 Hint = information, ⚠️ Warning = likely problem, ❌ Error = 
 - 💡 Hint — A workflow calls a parse function (parsing belongs in route)
 - 💡 Hint — `slime.config.ts` is missing (it maps error codes to HTTP status codes)
 - 💡 Hint — `parse.ts` exceeds ~300 lines or ~10 functions (shared schemas are allowed)
-- 💡 Hint — A store filter uses a generic shape such as `{ column, op, value }` (use a closed type in business vocabulary)
+- 💡 Hint — A store filter or search query has column names or operators typed as open types such as `string` (use a union of literals defined by the store)
 - 💡 Hint — A store function is called inside a loop (`for` / `forEach` / `map`, etc.), which can cause N+1 queries (add a batch function to the store)
 - 💡 Hint — `logic.ts` exceeds ~300 lines or ~10 functions (consider splitting into `logic/`)
 - 💡 Hint — A domain store touches a table with no declared owner (declare it under `tables` in `slime.config.ts`)

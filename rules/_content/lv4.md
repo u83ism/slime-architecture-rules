@@ -93,11 +93,14 @@ await prisma.$transaction(async (tx) => { ... })  // belongs in store.ts or via 
   - Writes: `create*` / `save*` / `update*` / `delete*` / `remove*`
 - Must not contain business logic — only data access.
 - **Must not return ORM types** (`Prisma.User`, Drizzle model types, etc.) — return only plain domain types defined in your own codebase.
-- **Read functions come in three shapes only** — do not add a new `findByXxx` for every slightly different condition, and do not accept free-form query conditions:
+- **Read functions come in four shapes only** — do not add a new `findByXxx` for every slightly different condition, and do not accept free-form query conditions:
   1. **By ID**: `find*ByIds(ids): Promise<Map<id, T>>` is the primary form. Write the SQL only here; a single-item version may be derived from it. Return a `Map` (results are unordered and may be missing items), and handle empty input and `IN` parameter limits inside it.
   2. **Unique key / lock**: e.g. `findUserByEmail(email)`, or a row-locking read — reads that are inherently one item.
-  3. **Filtering**: `list*(filter, page)`, where `filter` is a closed type defined by the store in business terms. When a new condition is needed, add a field to the type — not a new function.
-- Filter conditions use business vocabulary (`{ status: "active", joinedAfter }`), never a generic `{ column, op, value }` shape. Sort order is an enumerated choice (`"joinedAt" | "name"`), not an arbitrary string.
+  3. **Filtering**: `list*(filter, page)`, where `filter` is a closed type defined by the store in business terms. All fields are optional, so any combination works — this covers ordinary search forms. When a new condition is needed, add a field to the type — not a new function.
+  4. **Condition-tree search**: `search*(query, page)`, for screens where the user composes the condition itself (e.g. an admin "advanced search" builder with AND / OR). `query` is a tree of `{ field, op, value }` nodes combined with `and` / `or`.
+- Filter conditions use business vocabulary (`{ status: ["active"], joinedAt: { from } }`). Express IN / range / partial-match as field types. Sort order is an enumerated choice (`"joinedAt" | "name"`), not an arbitrary string.
+- **The line is whether the vocabulary is closed, not whether the shape is generic.** In a condition-tree search, `field` and `op` must be unions of literals defined by the store — never `string`. Validate incoming queries in parse (this doubles as a column allow-list and injection protection). The store decides which fields are searchable (e.g. only indexed columns).
+- Fuzzy search, facets, or searching very large datasets belong in a search engine (OpenSearch, Meilisearch, etc.), behind `client/` (Lv4–8) or a read-side adapter (Lv10). The `search*(query, page)` shape seen by callers does not change.
 - **Must not accept ORM types or query builders as parameters** (`Prisma.UserWhereInput`, etc.) — that lets callers build queries outside the store.
 - Business thresholds (e.g., "within 30 days") are computed in logic and passed as filter values, never hard-coded in the store.
 - Screen-specific reads with joins or aggregation that do not fit `filter` get a purpose-named function (`listOrdersForDashboard`). Slight similarity between purpose-named functions is acceptable — they are deleted together with their screen.
@@ -151,8 +154,19 @@ export const findUserByEmail = async (email: string): Promise<Prisma.User | null
 export const findActiveUsersByTenant = ...
 export const findActiveUsersByTenantOrderByName = ...
 
+// OK — condition-tree search: generic shape, closed vocabulary
+export type UserSearchField = "status" | "tenantId" | "joinedAt" | "name"
+export type UserSearchQuery =
+  | { and: readonly UserSearchQuery[] }
+  | { or: readonly UserSearchQuery[] }
+  | { field: UserSearchField; op: "eq" | "in" | "gte" | "lte" | "contains"; value: unknown }
+export const searchUsers = async (query: UserSearchQuery, page: Page): Promise<User[]> => { /* translate the tree into a where clause */ }
+
 // NG — accepting ORM query types (lets callers build queries outside the store)
 export const listUsersWhere = async (where: Prisma.UserWhereInput) => ...
+
+// NG — open vocabulary (any column, even unindexed or nonexistent ones)
+type Condition = { column: string; op: string; value: unknown }
 
 // NG — calling the store inside a loop (N+1)
 for (const order of orders) { order.user = await findUserById(order.userId) }
@@ -253,7 +267,7 @@ Severity: 💡 Hint = information, ⚠️ Warning = likely problem, ❌ Error = 
 - 💡 Hint — `slime.config.ts` is missing (it maps error codes to HTTP status codes)
 - 💡 Hint — `parse.ts` exceeds ~300 lines or ~10 functions (shared schemas are allowed)
 - 💡 Hint — A store function name violates the naming convention (`find*` / `list*` / `get*` / `count*` / `search*` / `create*` / `save*` / `update*` / `delete*` / `remove*`)
-- 💡 Hint — A store filter uses a generic shape such as `{ column, op, value }` (use a closed type in business vocabulary)
+- 💡 Hint — A store filter or search query has column names or operators typed as open types such as `string` (use a union of literals defined by the store)
 - 💡 Hint — A store function is called inside a loop (`for` / `forEach` / `map`, etc.), which can cause N+1 queries (add a batch function to the store)
 <!-- END GENERATED -->
 

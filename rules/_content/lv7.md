@@ -134,7 +134,7 @@ export const UpdateProfileWorkflow = async (input: ValidatedInput) => {
 - `workflow.ts`: receives parsed input and the principal — calls store/logic and `client/adapter.ts` — never imports ORM directly, never touches HTTP objects.
 - `logic.ts`: pure functions with domain-prefixed names, `Result` for fallible operations. Decides resource-level authorization from the principal and the loaded resource.
 - `logic.test.ts`: **mandatory** — missing test file is a ❌ Error at Lv7.
-- `store.ts`: `find*` / `list*` / `get*` / `count*` / `search*` / `create*` / `save*` / `update*` / `delete*` / `remove*` naming; no ORM types in return values or parameters. Read functions take three shapes: by ID (`find*ByIds` returning a `Map`), unique key / lock, and `list*(filter, page)` with a closed filter type. Never call the store inside a loop.
+- `store.ts`: `find*` / `list*` / `get*` / `count*` / `search*` / `create*` / `save*` / `update*` / `delete*` / `remove*` naming; no ORM types in return values or parameters. Read functions take four shapes: by ID (`find*ByIds` returning a `Map`), unique key / lock, `list*(filter, page)` with a closed filter type, and `search*(query, page)` with closed fields and operators. Never call the store inside a loop.
 
 ---
 
@@ -252,7 +252,7 @@ Severity: 💡 Hint = information, ⚠️ Warning = likely problem, ❌ Error = 
 - 💡 Hint — A workflow calls a parse function (parsing belongs in route)
 - 💡 Hint — `slime.config.ts` is missing (it maps error codes to HTTP status codes)
 - 💡 Hint — `parse.ts` exceeds ~300 lines or ~10 functions (shared schemas are allowed)
-- 💡 Hint — A store filter uses a generic shape such as `{ column, op, value }` (use a closed type in business vocabulary)
+- 💡 Hint — A store filter or search query has column names or operators typed as open types such as `string` (use a union of literals defined by the store)
 - 💡 Hint — A store function is called inside a loop (`for` / `forEach` / `map`, etc.), which can cause N+1 queries (add a batch function to the store)
 - 💡 Hint — `logic.ts` exceeds ~300 lines or ~10 functions (consider splitting into `logic/`)
 - 💡 Hint — A domain store touches a table with no declared owner (declare it under `tables` in `slime.config.ts`)

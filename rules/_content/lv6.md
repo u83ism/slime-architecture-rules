@@ -140,7 +140,7 @@ export const userRoutes = (r: Router) => {
   - Reads: `find*` / `list*` / `get*` / `count*` / `search*`
   - Writes: `create*` / `save*` / `update*` / `delete*` / `remove*`
 - Must not accept ORM types or query builders as parameters (now **Error**, up from Warning at Lv5).
-- Read functions keep the three shapes from Lv4: by ID (`find*ByIds` returning a `Map`, primary), unique key / lock, and filtering via `list*(filter, page)` with a closed business-vocabulary filter type. Screen-specific reads get a purpose-named function. Never call the store inside a loop.
+- Read functions keep the four shapes from Lv4: by ID (`find*ByIds` returning a `Map`, primary), unique key / lock, filtering via `list*(filter, page)` with a closed business-vocabulary filter type, and condition-tree search via `search*(query, page)` whose fields and operators are closed literal unions. Screen-specific reads get a purpose-named function. Never call the store inside a loop.
 
 ### shared/
 - `shared/utility.ts`: pure utility functions shared across domains (no side effects).
@@ -265,7 +265,7 @@ Severity: 💡 Hint = information, ⚠️ Warning = likely problem, ❌ Error = 
 - 💡 Hint — A workflow calls a parse function (parsing belongs in route)
 - 💡 Hint — `slime.config.ts` is missing (it maps error codes to HTTP status codes)
 - 💡 Hint — `parse.ts` exceeds ~300 lines or ~10 functions (shared schemas are allowed)
-- 💡 Hint — A store filter uses a generic shape such as `{ column, op, value }` (use a closed type in business vocabulary)
+- 💡 Hint — A store filter or search query has column names or operators typed as open types such as `string` (use a union of literals defined by the store)
 - 💡 Hint — A store function is called inside a loop (`for` / `forEach` / `map`, etc.), which can cause N+1 queries (add a batch function to the store)
 - 💡 Hint — `logic.ts` exceeds ~300 lines or ~10 functions (consider splitting into `logic/`)
 - 💡 Hint — A domain store touches a table with no declared owner (declare it under `tables` in `slime.config.ts`)

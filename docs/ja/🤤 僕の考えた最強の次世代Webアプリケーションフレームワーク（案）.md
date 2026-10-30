@@ -228,7 +228,7 @@ return slime.withTransaction(async () => {
 - store の関数名が命名規則（`find*` / `list*` / `get*` / `count*` / `search*` / `create*` / `save*` / `update*` / `delete*` / `remove*`）に違反している → 💡 Hint
 - store がORM型を戻り値に使っている → ⚠️ Warning
 - store がORM型やクエリビルダーを引数に取っている（storeの外でクエリを組み立てられてしまう） → ⚠️ Warning
-- store の絞り込み条件が `{ column, op, value }` のような汎用の形になっている（業務の言葉の閉じた型にする） → 💡 Hint
+- store の絞り込み・検索条件の列名や演算子が `string` のような開いた型になっている（storeが決めたリテラルの合併型にする） → 💡 Hint
 - store の関数をループ（`for` / `forEach` / `map` 等）の中で呼んでいる（N+1になりうる。一括取得の関数を store に用意する） → 💡 Hint
 - Lv3までの検査はすべて継続する
 <!-- END GENERATED -->

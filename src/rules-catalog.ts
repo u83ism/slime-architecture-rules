@@ -185,8 +185,8 @@ export const RULE_CATALOG: readonly RuleDefinition[] = [
   {
     id: "store-generic-filter",
     summary: {
-      ja: "store の絞り込み条件が `{ column, op, value }` のような汎用の形になっている（業務の言葉の閉じた型にする）",
-      en: "A store filter uses a generic shape such as `{ column, op, value }` (use a closed type in business vocabulary)",
+      ja: "store の絞り込み・検索条件の列名や演算子が `string` のような開いた型になっている（storeが決めたリテラルの合併型にする）",
+      en: "A store filter or search query has column names or operators typed as open types such as `string` (use a union of literals defined by the store)",
     },
     severity: [[4, "hint"]],
   },
