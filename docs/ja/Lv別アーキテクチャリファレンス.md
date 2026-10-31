@@ -1353,9 +1353,11 @@ src/
       ports.ts                # UserWritePort
       logic.ts
       logic.test.ts
-    query/                    # ← Lv10で追加。読み取り側
-      workflow.ts
+    query/                    # ← Lv10で追加。読み取り側（1クエリ1ファイル）
       ports.ts                # UserReadPort
+      userList.ts             # 一覧
+      userDetail.ts           # 詳細
+      userDashboard.ts        # 画面専用の取得
     routes.ts                 # command/queryの両workflowを束ねる
   domains/order/
     command/
@@ -1364,8 +1366,9 @@ src/
       logic.ts
       logic.test.ts
     query/
-      workflow.ts
       ports.ts
+      orderList.ts
+      orderDetail.ts
     routes.ts
   domains/auth/                 # 上流domain（Lv6参照）
     logic.ts
@@ -1386,7 +1389,7 @@ block-beta
   space:7
   Lcmd["domains/xxx/<br>command/"] space space space cwf["workflow.ts<br>書き込み"] clogic["logic.ts"] cports["ports.ts<br>WritePort"]
   space:7
-  Lqry["domains/xxx/<br>query/"] space space space qwf["workflow.ts<br>読み取り"] space qports["ports.ts<br>ReadPort"]
+  Lqry["domains/xxx/<br>query/"] space space space qwf["userList.ts 等<br>1クエリ1ファイル"] space qports["ports.ts<br>ReadPort"]
   space:7
   Linfra["infrastructure/"] space space space space space adapters["commandAdapter.ts<br>queryAdapter.ts"]
   route --> routes
@@ -1422,12 +1425,13 @@ block-beta
 
 | ファイル | 内容 |
 |---|---|
-| `workflow.ts` | 状態を読む操作（get / list / search）。副作用なし |
 | `ports.ts` | ReadPortのインターフェース定義のみ |
+| `userList.ts` 等 | 状態を読む操作（get / list / search）。**1ファイルに1クエリ**で、ファイル名は何を取得するかを表す。副作用なし |
 
+- 1クエリ1ファイルにするのは、「このファイルが何を取得するか」が一目でわかり、画面と一緒に消せるようにするため。クエリファイル間で共通化したヘルパーを作らない（似ているのは許容する）
 - 読み取り最適化のデータ構造（非正規化・ビューモデル）を返してよい
 - 書き込みモデルと同じ形状に縛られない
-- 一覧は `list(filter, page)`、ユーザーが組み立てる条件式は `search(query, page)` にまとめ（検索エンジンを使う場合もこのアダプターの裏に置く）、どちらにも収まらない画面専用の取得は用途名の関数（`listForDashboard` 等）にする。用途名の関数どうしが少し似ているのは許容する
+- ReadPortの関数は、一覧は `list(filter, page)`、ユーザーが組み立てる条件式は `search(query, page)` にまとめ（検索エンジンを使う場合もこのアダプターの裏に置く）、どちらにも収まらない画面専用の取得は用途名の関数（`listForDashboard` 等）にする。用途名の関数どうしが少し似ているのは許容する。各クエリファイルは、このReadPortを引数で受け取って1つの取得を行う
 - **読み取り側のアダプターに限り、他domainが所有するテーブルとの越境JOINを許可する**（テーブルの所有権の例外）。書き込み側のアダプターは引き続き所有テーブルだけを触る
 - イベントの発行禁止（副作用ゼロ）
 

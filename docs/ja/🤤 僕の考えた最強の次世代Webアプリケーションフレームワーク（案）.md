@@ -215,6 +215,7 @@ route.post('/api', myCustomMiddleware, SomeWorkflow)
 ### Lv 4
 
 #### Slimeが提供するもの
+- `ok(value)` / `err(error)` / `Result<T, E>` 型 - Lv4ではclientが外部の拒否（支払い拒否等）を返すのに使う。Workflowはerrを `DomainError` に変えて投げる（Lv5からはlogicでも使い、routeまで戻り値で運ぶ）
 - `slime.withTransaction(async () => { ... })` - 複数Storeをまたぐトランザクションをラップするユーティリティ。ORM固有のトランザクションAPIをWorkflowから隠蔽する。コールバックがthrowしたときに加え、Lv5以降でResultのerrを返したときもロールバックする
 
 ```ts
@@ -242,7 +243,7 @@ return slime.withTransaction(async () => {
 ### Lv 5
 
 #### Slimeが提供するもの
-- `ok(value)` / `err(error)` / `Result<T, E>` 型 - Result型のユーティリティ（neverthrow等の外部ライブラリでも代替可）
+- `ok(value)` / `err(error)` / `Result<T, E>` 型 - Lv4から提供しているResult型のユーティリティを、logicの業務判断でも使う（neverthrow等の外部ライブラリでも代替可）
 - 応答形式の関数（`json(...)`）のResult対応 - WorkflowがResultを返したら、okは2xx、errは対応表の4xx（Problem Details形式）にする。Lv5以降、業務上の拒否はthrowせずrouteまで戻り値で運ぶ
 
 ```ts

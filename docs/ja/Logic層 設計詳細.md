@@ -188,21 +188,19 @@ Kaachanが構造違反を検知し、rulesファイルがAIに意味的判断の
 
 ---
 
-## 文書反映時の変更箇所まとめ
+## 文書への反映状況
 
-### アーキテクチャ文書（進化論）Lv5セクション
+現在の正は [Lv別アーキテクチャリファレンス](./Lv別アーキテクチャリファレンス.md) のLv5（2種類の関数・Store/Clientを呼ばないこと・clientの外部拒否）と、`src/rules-catalog.ts` の検査項目。
 
-- Logicの定義を「業務判断（Result型）」だけでなく「ドメイン計算・変換（純粋関数なら可）」を含むよう拡張
-- 「Result型返却必須」の表現を「失敗しうる場合はResult型必須（throwしない）」に修正
--「LogicはStoreを呼べない」「Logicの入力はプリミティブであるべき」を明記
-- LaravelのServiceとの対応関係（分解の図）を追加
+### 反映済み
 
-### 補足資料（ADR）
+- リファレンスLv5：Logicの2種類の関数（業務判断／ドメイン計算・変換）、「LogicがStoreを呼びたくなる」ときの対処
+- 進化論Lv5のアーキテクチャルール：失敗しうる業務判断だけResult型、Store・Clientを呼ばない
+- 検査項目：LogicからのStore/Client/ORMのimportを ❌ Error（`logic-store-client-import`）
+- Kaachan設計仕様のエラーマッピング：LogicとclientのResult errを4xxにする
 
-- ADR-Lv5に「副作用ありResult型の扱い（Adapter層）」を追加
-- ADR-Lv5に「ドメイン知識の散在問題とKaachanの限界・rulesファイルの役割分担」を追加
+### 未反映
 
-### FW文書
-
-- Lv5のKaachanお叱りポイントに「LogicからのStore/Client import」を ❌ Error として追記
-- DomainErrorマッピング説明を「LogicのResult err」だけでなく「Adapterがres.errで返す場合も含む」よう拡張
+- 進化論Lv5：LaravelのServiceとの対応関係（分解の図）
+- 補足資料のADR-Lv5：「副作用ありResult型の扱い（Adapter層）」「ドメイン知識の散在問題とKaachanの限界・rulesファイルの役割分担」
+- FW文書Lv5のDomainError / TechnicalError表：Adapterが外部の拒否をerrで返す場合

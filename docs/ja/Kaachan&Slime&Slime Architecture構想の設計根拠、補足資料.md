@@ -40,7 +40,7 @@ Result型で運ぶ範囲は、**業務上の拒否が生まれる場所（Logic�
 
 ROPをStore・Parseにまで拡張すること（全層Result型統一）は技術的には可能だが、Store/ParseのエラーはInfraError・ParseErrorというTechnicalErrorに近い性質を持ち、Result型で管理するメリットが薄くなる。現設計の境界線は、throwの意味論と最も齟齬のない線として選ばれた。
 
-> **改訂の経緯**：旧版では「Logicだけ」Result型とし、WorkflowはResult errを受け取って`throw new Error(code)`に変換していた。Result型を全面に押し出すのは学習コストが高すぎると考えたためである。しかしこの形では、業務上の拒否が文字列の例外になって型の情報が消え、対応表への登録漏れが本番の500で初めて見つかる。また「業務上の拒否は例外ではない」というこのADR自身の主張とも矛盾していた。そこで、Result型を持ち込むのはLv5（Logic導入時）からのまま、運ぶ範囲をrouteまで延ばした。Result型がまだないLv3〜4では、型つきの`DomainError`をthrowする簡易な形で業務上の拒否を表す。
+> **改訂の経緯**：旧版では「Logicだけ」Result型とし、WorkflowはResult errを受け取って`throw new Error(code)`に変換していた。Result型を全面に押し出すのは学習コストが高すぎると考えたためである。しかしこの形では、業務上の拒否が文字列の例外になって型の情報が消え、対応表への登録漏れが本番の500で初めて見つかる。また「業務上の拒否は例外ではない」というこのADR自身の主張とも矛盾していた。そこで、業務上の拒否を戻り値で運ぶのはLv5（Logic導入時）からのまま、運ぶ範囲をrouteまで延ばした。Lv3〜4では、型つきの`DomainError`をthrowする簡易な形で業務上の拒否を表す。Lv4の`client.ts`は外部の拒否（支払い拒否等）をResult型のerrで返すが、Workflowがそれを`DomainError`に変えて投げる。
 
 ---
 

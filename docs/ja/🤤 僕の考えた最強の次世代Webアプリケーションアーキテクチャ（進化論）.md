@@ -238,7 +238,8 @@ Logic層の最大リスクはドメイン分割（Lv6）前の際限ない肥大
   - 一定規模を超えたらLv6への移行を検討する
 - Logic
   - 純粋関数のみ（状態・副作用禁止）
-  - throwはNG。Result型（ok/err）で返す
+  - throwはNG。失敗しうる業務判断はResult型（ok/err）で返す（失敗しないドメイン計算・変換は普通の値を返してよい）
+  - Store・Clientを呼ばない。必要なデータはWorkflowが解決して引数で渡す
   - 自動テスト必須
   - **関数名にドメインprefixを必須**（`userCan*`・`orderCan*` 等）
   - 同一ファイルで異なるprefixが混在してきたら `logic/` フォルダへの分割を検討
@@ -392,10 +393,7 @@ export default {
 ```
 /src
  ├─ app/                  # アプリ全体の指示役（になりたい）層
- │    ├─ route.ts         # エントリーポイント（routes/ をimportして束ねる）
- │    ├─ routes/
- │    │    ├─ api.ts      # /api/* 空間（domainルートを束ねてprefixを付与）
- │    │    └─ web.ts      # /* 空間（将来のwebルート置き場。今は空でよい）
+ │    ├─ route.ts         # エントリーポイント（domainルートをimportして束ね、/api prefixを付与）
  │    ├─ parse.ts         # パース（型変換）
  │    ├─ middleware.ts    # Middlewareの置き場所（Lv2から継続）
  │    └─ workflow.ts      # クロスドメインOrchestration (App層)
@@ -472,9 +470,6 @@ export const CreateUserWorkflow = async (input: CreateUserInput) => {
 /src
  ├─ app/
  │    ├─ route.ts
- │    ├─ routes/
- │    │    ├─ api.ts        # /api/* 空間
- │    │    └─ web.ts        # /* 空間（将来用）
  │    ├─ parse.ts
  │    ├─ middleware.ts
  │    └─ workflow.ts
@@ -489,7 +484,7 @@ export const CreateUserWorkflow = async (input: CreateUserInput) => {
  │    └─ adapter.ts
  │
  ├─ domains/user/
- │    ├─ routes.ts          # userドメインのルート定義（prefixなし。api.tsで付与）
+ │    ├─ routes.ts          # userドメインのルート定義（prefixなし。app/route.tsで付与）
  │    ├─ workflow.ts
  │    ├─ logic.ts
  │    ├─ logic.test.ts      ← Lv7でテスト必須（ないとエラー）
@@ -579,9 +574,6 @@ export const createOrderWithInventory = (input: CreateOrderInput) =>
 /src
  ├─ app/
  │    ├─ route.ts
- │    ├─ routes/
- │    │    ├─ api.ts        # /api/* 空間
- │    │    └─ web.ts        # /* 空間（将来用）
  │    ├─ parse.ts
  │    ├─ middleware.ts
  │    └─ workflow.ts
@@ -699,9 +691,12 @@ export const createUserWorkflow =
 
 ```ts
 // infrastructure/user/prismaAdapter.ts
+// ORMのレコードは自前の型に詰め替えて返す（Lv4から続くORM型の流出禁止）
+const toUser = (r: { id: string; name: string; email: string }): User => ({ id: r.id, name: r.name, email: r.email })
+
 export const prismaUserPort: UserPort = {
-  findByEmail: (email) => prisma.user.findUnique({ where: { email } }),
-  save: (user) => prisma.user.create({ data: user }),
+  findByEmail: (email) => prisma.user.findUnique({ where: { email } }).then((r) => (r ? toUser(r) : null)),
+  save: (user) => prisma.user.create({ data: user }).then(toUser),
 }
 ```
 
@@ -756,9 +751,6 @@ ORMをDrizzleや別のものに変えたいなら `infrastructure/user/drizzleAd
 /src
  ├─ app/
  │    ├─ route.ts
- │    ├─ routes/
- │    │    ├─ api.ts         # /api/* 空間
- │    │    └─ web.ts         # /* 空間（将来用）
  │    ├─ parse.ts
  │    ├─ middleware.ts
  │    └─ workflow.ts         ← PortとWorkflowをここで繋げる
@@ -876,9 +868,6 @@ domains/user/
 /src
  ├─ app/
  │    ├─ route.ts
- │    ├─ routes/
- │    │    ├─ api.ts         # /api/* 空間
- │    │    └─ web.ts         # /* 空間（将来用）
  │    ├─ parse.ts
  │    ├─ middleware.ts
  │    └─ workflow.ts
@@ -913,8 +902,8 @@ domains/user/
  │
  └─ infrastructure/
       ├─ user/
-      │    ├─ prismaWriteAdapter.ts    # command/ 向け
-      │    └─ prismaReadAdapter.ts     # query/ 向け（JOIN実装を含む）
+      │    ├─ commandAdapter.ts    # command/ 向け（WritePortを実装）
+      │    └─ queryAdapter.ts      # query/ 向け（ReadPortを実装。JOIN実装を含む）
       └─ mail/
            └─ sendgridAdapter.ts
 ```
@@ -924,29 +913,39 @@ domains/user/
 ### 実際のコードイメージ
 
 ```ts
-// domains/user/query/userWithOrders.ts
-// ← ordersドメインを越境するクエリ。Lv9まではNGだったがquery/内はOK
-type UserWithOrdersView = {
+// domains/user/query/ports.ts（ReadPortの定義）
+export type UserWithOrdersView = {
   userId: string
   name: string
   orders: { orderId: string; total: number }[]
 }
 
-// ReadPortの定義（query側）
-type UserWithOrdersPort = {
+export type UserReadPort = {
   findWithOrders: (userId: string) => Promise<UserWithOrdersView | null>
+  // ...他のクエリが使う関数
 }
+
+// domains/user/query/userWithOrders.ts（1クエリ1ファイル）
+// ← ordersドメインを越境するクエリ。Lv9まではNGだったがquery/内はOK
+export const getUserWithOrdersWorkflow =
+  (port: UserReadPort) =>
+  async (input: { userId: string }): Promise<UserWithOrdersView | null> =>
+    port.findWithOrders(input.userId)
 ```
 
 ```ts
-// infrastructure/user/prismaReadAdapter.ts
+// infrastructure/user/queryAdapter.ts
 // JOINを使った実装（query側なので越境OK）
-export const prismaUserWithOrdersPort: UserWithOrdersPort = {
+export const userQueryAdapter: UserReadPort = {
   findWithOrders: (userId) =>
-    prisma.user.findUnique({
-      where: { id: userId },
-      include: { orders: true },  // ordersを越境してJOIN
-    }),
+    prisma.user
+      .findUnique({
+        where: { id: userId },
+        include: { orders: true },  // ordersを越境してJOIN
+      })
+      .then((r) =>
+        r ? { userId: r.id, name: r.name, orders: r.orders.map((o) => ({ orderId: o.id, total: o.total })) } : null,
+      ),  // ORMのレコードはビューの型に詰め替えて返す
 }
 ```
 
@@ -982,7 +981,7 @@ Lv4でQuery/Command命名規則（関数名）を入れた。Lv9でPorts & Adapt
 - command/のWorkflowは集約ルートを通じた更新のみ
 - query/へ集約クラス・ドメインオブジェクトを持ち込まない
 
-> 💧 **Kaachan/Slime**: 自動検知の詳細は[FW文書](https://qiita.com/u83unlimited/items/8b0e5b51749ccdfde393#lv-10)参照
+> 💧 **Kaachan/Slime**: 自動検知の詳細は[FW文書](./🤤%20僕の考えた最強の次世代Webアプリケーションフレームワーク（案）.md#lv-10-1)参照
 >
 > 💡 **ADR**: [なぜCQRSはLv10なのか（Lv6でよいのでは）](./Kaachan%26Slime%26Slime%20Architecture構想の設計根拠、補足資料.md#adr-lv10なぜcqrsはlv10なのかlv6でよいのでは)
 
