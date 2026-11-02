@@ -364,7 +364,6 @@ return slime.withTransaction(async () => {
 
 #### Kaachanのお叱りポイント
 <!-- BEGIN GENERATED: kaachan-checks lv=8 （src/rules-catalog.ts から自動生成。手で編集しない） -->
-- `shared/events.ts` が存在しない → ⚠️ Warning
 - `shared/events.ts` がdomainや `orchestrate/` をimportしている → ❌ Error
 - イベント型がクラスを含んでいる（純粋なデータ型のみ） → ❌ Error
 - イベント型に `type` フィールド（discriminated union）がない → ⚠️ Warning
@@ -380,7 +379,7 @@ return slime.withTransaction(async () => {
 
 #### Kaachanのお叱りポイント
 <!-- BEGIN GENERATED: kaachan-checks lv=9 （src/rules-catalog.ts から自動生成。手で編集しない） -->
-- `infrastructure/` フォルダが存在しない → ⚠️ Warning
+- domainに `ports.ts` があるのに `infrastructure/` フォルダが存在しない（Ports & Adaptersへの移行の途中） → ⚠️ Warning
 - domainフォルダが `infrastructure/` を直接importしている → ❌ Error
 - ORM/DBモジュールのimportが `infrastructure/` 以外にある → ❌ Error
 - `ports.ts` に実装コードがある（型定義のみ） → ❌ Error

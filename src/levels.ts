@@ -86,14 +86,16 @@ export const LEVEL_DEFINITIONS: readonly LevelDefinition[] = [
     name: "Shared Events",
     description: "ドメイン間のイベント定義を shared/events.ts に集約した構成。",
     evidenceLabel: "shared/events.ts",
+    // infrastructure/ は判定に使わない。ports.ts だけ作った移行途中の状態もLv9と判定し、
+    // infrastructure-missing などLv9のルールで残りの作業を案内するため
     requiredFilesForNext: ["ports.ts in domain folder"],
-    requiredFoldersForNext: ["infrastructure/"],
+    requiredFoldersForNext: [],
   },
   {
     level: 9,
     name: "Ports & Adapters",
     description: "Ports & Adapters パターンを導入し、infrastructure/ と ports.ts でインフラ境界を明確化した構成。",
-    evidenceLabel: "infrastructure/, ports.ts in domain",
+    evidenceLabel: "ports.ts in domain",
     requiredFilesForNext: [],
     requiredFoldersForNext: ["command/ and query/ in domain folder"],
   },

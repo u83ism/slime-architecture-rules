@@ -1136,7 +1136,6 @@ export const createOrderWithInventory = (input: ValidatedInput) =>
 ### Kaachanが検査する項目
 
 <!-- BEGIN GENERATED: kaachan-checks lv=8 （src/rules-catalog.ts から自動生成。手で編集しない） -->
-- `shared/events.ts` が存在しない → ⚠️ Warning
 - `shared/events.ts` がdomainや `orchestrate/` をimportしている → ❌ Error
 - イベント型がクラスを含んでいる（純粋なデータ型のみ） → ❌ Error
 - イベント型に `type` フィールド（discriminated union）がない → ⚠️ Warning
@@ -1304,7 +1303,7 @@ infrastructure/*/      →  domains/xxx/workflow.ts                            �
 ### Kaachanが検査する項目
 
 <!-- BEGIN GENERATED: kaachan-checks lv=9 （src/rules-catalog.ts から自動生成。手で編集しない） -->
-- `infrastructure/` フォルダが存在しない → ⚠️ Warning
+- domainに `ports.ts` があるのに `infrastructure/` フォルダが存在しない（Ports & Adaptersへの移行の途中） → ⚠️ Warning
 - domainフォルダが `infrastructure/` を直接importしている → ❌ Error
 - ORM/DBモジュールのimportが `infrastructure/` 以外にある → ❌ Error
 - `ports.ts` に実装コードがある（型定義のみ） → ❌ Error
@@ -1662,14 +1661,13 @@ Slime Architectureが扱うのは**アプリコードをどこにどう書くか
 | `orchestrate-imports-orchestrate` | `orchestrate/` フォルダ同士がimportし合っている | — | — | — | — | — | ❌ | ❌ | ❌ | ❌ |
 | `orchestrate-imports-app` | `orchestrate/` フォルダが `app/` をimportしている | — | — | — | — | — | ❌ | ❌ | ❌ | ❌ |
 | `defer-suggestion` | `withTransaction()` 内に非DBの非同期処理（メール送信・外部API呼び出し等）がある（`defer()` を提案。opt-in） | — | — | — | — | — | 💡 | 💡 | 💡 | 💡 |
-| `events-file-missing` | `shared/events.ts` が存在しない | — | — | — | — | — | — | ⚠️ | ⚠️ | ⚠️ |
 | `events-imports-domain` | `shared/events.ts` がdomainや `orchestrate/` をimportしている | — | — | — | — | — | — | ❌ | ❌ | ❌ |
 | `event-class-type` | イベント型がクラスを含んでいる（純粋なデータ型のみ） | — | — | — | — | — | — | ❌ | ❌ | ❌ |
 | `event-missing-type-field` | イベント型に `type` フィールド（discriminated union）がない | — | — | — | — | — | — | ⚠️ | ⚠️ | ⚠️ |
 | `event-type-not-upper-snake` | イベント型の `type` が大文字スネークケースでない | — | — | — | — | — | — | ⚠️ | ⚠️ | ⚠️ |
 | `orchestrate-without-transaction` | `orchestrate/` フォルダに `withTransaction()` がない（ドメインイベントで代替できるはず） | — | — | — | — | — | — | ⚠️ | ⚠️ | ⚠️ |
 | `orchestrate-non-transactional-io` | `orchestrate/` フォルダがメール送信・外部API呼び出し等の非トランザクション処理を含んでいる | — | — | — | — | — | — | ⚠️ | ⚠️ | ⚠️ |
-| `infrastructure-missing` | `infrastructure/` フォルダが存在しない | — | — | — | — | — | — | — | ⚠️ | ⚠️ |
+| `infrastructure-missing` | domainに `ports.ts` があるのに `infrastructure/` フォルダが存在しない（Ports & Adaptersへの移行の途中） | — | — | — | — | — | — | — | ⚠️ | ⚠️ |
 | `domain-imports-infrastructure` | domainフォルダが `infrastructure/` を直接importしている | — | — | — | — | — | — | — | ❌ | ❌ |
 | `orm-outside-infrastructure` | ORM/DBモジュールのimportが `infrastructure/` 以外にある | — | — | — | — | — | — | — | ❌ | ❌ |
 | `ports-has-implementation` | `ports.ts` に実装コードがある（型定義のみ） | — | — | — | — | — | — | — | ❌ | ❌ |

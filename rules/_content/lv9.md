@@ -261,12 +261,11 @@ Severity: 💡 Hint = information, ⚠️ Warning = likely problem, ❌ Error = 
 - ⚠️ Warning — `app/route.ts` is too large (over 500 lines)
 - ⚠️ Warning — A route references a workflow file that does not exist (dead route candidate)
 - ⚠️ Warning — A route past its `sunset` date still exists
-- ⚠️ Warning — `shared/events.ts` does not exist
 - ⚠️ Warning — An event type has no `type` discriminant field
 - ⚠️ Warning — An event's `type` value is not UPPER_SNAKE_CASE
 - ⚠️ Warning — An `orchestrate/` folder has no `withTransaction()` (domain events + `defer()` may suffice)
 - ⚠️ Warning — An `orchestrate/` folder contains non-transactional work (email, external API calls)
-- ⚠️ Warning — The `infrastructure/` folder does not exist
+- ⚠️ Warning — A domain has `ports.ts` but the `infrastructure/` folder does not exist (Ports & Adapters migration in progress)
 - 💡 Hint — API routes are defined outside an `/api` group
 - 💡 Hint — `workflow.ts` exceeds ~300 lines or ~10 functions
 - 💡 Hint — A workflow calls a parse function (parsing belongs in route)

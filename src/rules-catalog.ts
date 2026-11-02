@@ -496,14 +496,6 @@ export const RULE_CATALOG: readonly RuleDefinition[] = [
 
   // ---- Lv8: domain events ----
   {
-    id: "events-file-missing",
-    summary: {
-      ja: "`shared/events.ts` が存在しない",
-      en: "`shared/events.ts` does not exist",
-    },
-    severity: [[8, "warning"]],
-  },
-  {
     id: "events-imports-domain",
     summary: {
       ja: "`shared/events.ts` がdomainや `orchestrate/` をimportしている",
@@ -556,8 +548,8 @@ export const RULE_CATALOG: readonly RuleDefinition[] = [
   {
     id: "infrastructure-missing",
     summary: {
-      ja: "`infrastructure/` フォルダが存在しない",
-      en: "The `infrastructure/` folder does not exist",
+      ja: "domainに `ports.ts` があるのに `infrastructure/` フォルダが存在しない（Ports & Adaptersへの移行の途中）",
+      en: "A domain has `ports.ts` but the `infrastructure/` folder does not exist (Ports & Adapters migration in progress)",
     },
     severity: [[9, "warning"]],
   },
