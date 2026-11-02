@@ -762,9 +762,12 @@ export default {
 | 操作 | ルール |
 |---|---|
 | 書き込み | 所有domainのstoreからだけ行う。他domainのテーブルへの書き込みは禁止 |
-| 読み取り | 所有domainのstoreの関数を、依存宣言（DAG）に沿って呼ぶ。他domainのテーブルを直接読まない |
-| 複数domainのテーブルを組み合わせる表示 | 各domainの `find*ByIds` で一括取得し、メモリ上で突き合わせる。それでも重い・複雑なら、Lv10で読み取り側（`query/`）に越境JOINを許す合図 |
+| 読み取り | 所有domainのstoreの関数を、依存宣言（DAG）に沿って呼ぶのが原則。ただしLv6〜9では、他domainのテーブルを直接読むことを許容する（💡 Hintとして一覧に出る） |
+| 書き込みの前提になる読み取り | 必ず所有domainの関数を通す（下記） |
+| 複数domainのテーブルを組み合わせる表示 | 各domainの `find*ByIds` で一括取得してメモリ上で突き合わせるか、直接JOINする（Hint）。直接の読み取りが増えて重い・複雑になってきたら、Lv10で読み取り側（`query/`）に寄せる合図 |
 
+- **所有権は書き込みから始める。** 壊れたときの被害は書き込みのほうが大きいので、Lv6ではまず書き込みを所有domainに閉じる。読み取りの所有権はLv10で `query/` と一緒に整え、`query/` の外での直接の読み取りはLv10からWarningになる。Lv6〜9のHintは、Lv10で寄せる対象の棚卸しとして使う
+- **書き込みの前提になる読み取りは所有domainの関数を通す。** たとえば「注文を受けてよいか」の判定に、orderのstoreがuserのテーブルの `status` を直接読むと、userの「有効」の定義が変わっても古い定義のまま判断し続ける。表示のための読み取りか判断のための読み取りかは静的に見分けられないので、Kaachanではなくrulesで守る
 - 1つのテーブルを所有するdomainは1つだけ。複数のdomainが同じテーブルを所有宣言したら、domainの切り方を見直す合図
 - 所有が宣言されていないテーブルは `shared/store.ts`（ドメイン未分化の一時置き場）から扱う。domainのstoreが未宣言のテーブルに触れたら、所有の宣言を促す
 - テーブルの所有を決めるのはdomainの名前と境界を決めるのと同じく、AIが提案し人間が裁可する
@@ -826,7 +829,7 @@ export const userRoutes = (r: Router) => {
 - 依存宣言にないdomain間のimport → ❌ Error
 - domain間の依存宣言に循環がある → ❌ Error
 - domainのstoreが、他domainの所有するテーブルに書き込んでいる → ❌ Error
-- domainのstoreが、他domainの所有するテーブルを直接読んでいる（所有domainの関数を経由する。Lv10の読み取り側アダプターは除く） → ⚠️ Warning
+- domainのstoreが、他domainの所有するテーブルを直接読んでいる（Lv6〜9は棚卸しのHint。Lv10では `query/` の読み取り側アダプターに寄せる） → 💡 Hint
 - 1つのテーブルを複数のdomainが所有宣言している → ❌ Error
 - domainのstoreが、所有の宣言されていないテーブルに触れている（`slime.config.ts` の `tables` に宣言する） → 💡 Hint
 - `client/client.ts` を直接importしている（`client/adapter.ts` を経由していない） → ❌ Error
@@ -1244,7 +1247,7 @@ export type UserPort = {
 ```
 
 - 読み取り関数の形（IDで引く一括版・一意キー・`filter` での絞り込み・`query` での条件式の検索）はLv4のstore.tsと同じ。`UserFilter` や `UserSearchQuery` はPortと一緒にdomain側で定義する
-- テーブルの所有権（Lv6）は `infrastructure/<domain>/` のアダプターに適用される。アダプターが触れてよいのは、そのdomainが所有するテーブルだけ
+- テーブルの所有権（Lv6）は `infrastructure/<domain>/` のアダプターに適用される。アダプターが書き込んでよいのは、そのdomainが所有するテーブルだけ。他domainのテーブルの直接の読み取りは、Lv6と同じく💡 Hintで許容する
 
 #### infrastructure/ — Portを実装する唯一の場所
 
@@ -1433,6 +1436,7 @@ block-beta
 - 書き込みモデルと同じ形状に縛られない
 - ReadPortの関数は、一覧は `list(filter, page)`、ユーザーが組み立てる条件式は `search(query, page)` にまとめ（検索エンジンを使う場合もこのアダプターの裏に置く）、どちらにも収まらない画面専用の取得は用途名の関数（`listForDashboard` 等）にする。用途名の関数どうしが少し似ているのは許容する。各クエリファイルは、このReadPortを引数で受け取って1つの取得を行う
 - **読み取り側のアダプターに限り、他domainが所有するテーブルとの越境JOINを許可する**（テーブルの所有権の例外）。書き込み側のアダプターは引き続き所有テーブルだけを触る
+- Lv6〜9でHintとして許容していた、`query/` の外での他domainのテーブルの直接の読み取りは、Lv10から ⚠️ Warning になる。Hintの一覧を手がかりに、読み取り側のアダプターへ寄せる。書き込みの前提になる参照は、WritePortを通して所有domainのアダプターに頼む
 - イベントの発行禁止（副作用ゼロ）
 
 #### routes.ts — command/queryを束ねる
@@ -1474,6 +1478,7 @@ export const userQueryAdapter: UserReadPort = {
 ### Kaachanが検査する項目
 
 <!-- BEGIN GENERATED: kaachan-checks lv=10 （src/rules-catalog.ts から自動生成。手で編集しない） -->
+- domainのstoreが、他domainの所有するテーブルを直接読んでいる（Lv6〜9は棚卸しのHint。Lv10では `query/` の読み取り側アダプターに寄せる） → ⚠️ Warning（Lv9の💡 Hintから変更）
 - domainフォルダに `command/` と `query/` がない → ⚠️ Warning
 - `command/` が `query/` をimportしている（ReadPortを含む） → ❌ Error
 - `query/` がWritePortや書き込み用アダプターをimportしている → ❌ Error
@@ -1631,7 +1636,7 @@ Slime Architectureが扱うのは**アプリコードをどこにどう書くか
 | `domain-undeclared-import` | 依存宣言にないdomain間のimport | — | — | — | — | ❌ | ❌ | ❌ | ❌ | ❌ |
 | `domain-dependency-cycle` | domain間の依存宣言に循環がある | — | — | — | — | ❌ | ❌ | ❌ | ❌ | ❌ |
 | `table-foreign-write` | domainのstoreが、他domainの所有するテーブルに書き込んでいる | — | — | — | — | ❌ | ❌ | ❌ | ❌ | ❌ |
-| `table-foreign-read` | domainのstoreが、他domainの所有するテーブルを直接読んでいる（所有domainの関数を経由する。Lv10の読み取り側アダプターは除く） | — | — | — | — | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
+| `table-foreign-read` | domainのstoreが、他domainの所有するテーブルを直接読んでいる（Lv6〜9は棚卸しのHint。Lv10では `query/` の読み取り側アダプターに寄せる） | — | — | — | — | 💡 | 💡 | 💡 | 💡 | ⚠️ |
 | `table-owner-duplicate` | 1つのテーブルを複数のdomainが所有宣言している | — | — | — | — | ❌ | ❌ | ❌ | ❌ | ❌ |
 | `table-owner-undeclared` | domainのstoreが、所有の宣言されていないテーブルに触れている（`slime.config.ts` の `tables` に宣言する） | — | — | — | — | 💡 | 💡 | 💡 | 💡 | 💡 |
 | `client-direct-import` | `client/client.ts` を直接importしている（`client/adapter.ts` を経由していない） | — | — | — | — | ❌ | ❌ | ❌ | ❌ | ❌ |

@@ -50,8 +50,10 @@ src/
 - `app/` may import from any domain regardless of the declaration (to aggregate routes and orchestrate).
 - Capabilities used by many domains (identity/auth, tenant) are **upstream domains**: ordinary domain folders that depend on no other domain. Do not create a special folder kind for them.
 - Settings belong to the domain whose rules use them. A single settings table is a storage detail, not a domain boundary.
-- **Table ownership**: declare in `slime.config.ts` which domain owns each table (by ORM model name). Only the owning domain's store writes to a table. Reading another domain's table goes through the owning domain's store functions, following the dependency DAG — never query it directly. A table has exactly one owner; tables with no declared owner are handled from `shared/store.ts`.
-- To combine data owned by several domains, fetch each in bulk with the owner's `find*ByIds` and join in memory. If that becomes too heavy or complex, it is a sign to move to Lv10, where read-side adapters may join across domains.
+- **Table ownership**: declare in `slime.config.ts` which domain owns each table (by ORM model name). Only the owning domain's store writes to a table. A table has exactly one owner; tables with no declared owner are handled from `shared/store.ts`.
+- **Ownership starts with writes.** Reading another domain's table should normally go through the owning domain's store functions, following the dependency DAG. In Lv6–Lv9, reading it directly is tolerated (reported as a 💡 Hint, which serves as the inventory to clean up in Lv10).
+- **Reads that a write decision depends on must go through the owning domain's functions.** For example, do not let the order store read the user table's `status` directly to decide whether an order may be accepted — if the user domain changes what "active" means, the order domain keeps deciding with the old definition. Kaachan cannot tell display reads from decision reads, so this rule is yours to follow.
+- To combine data owned by several domains for display, fetch each in bulk with the owner's `find*ByIds` and join in memory, or join directly (Hint). If direct reads pile up or become too heavy or complex, it is a sign to move to Lv10, where they belong in `query/` read-side adapters.
 - Slime Architecture does not cover database design itself (normalization, indexes, column types, naming) — only which domain owns which table.
 
 ```ts
@@ -249,7 +251,6 @@ Severity: 💡 Hint = information, ⚠️ Warning = likely problem, ❌ Error = 
 - ⚠️ Warning — `logic.ts` exceeds ~500 lines, mixes domain prefixes, or contains function groups whose type dependencies do not intersect
 - ⚠️ Warning — A workflow throws a `DomainError` (from Lv5, return `err()` up to the route instead)
 - ⚠️ Warning — A folder directly under `domains/` or `orchestrate/` is not named in kebab-case
-- ⚠️ Warning — A domain store reads a table owned by another domain directly (go through the owning domain's functions; Lv10 read-side adapters are exempt)
 - ⚠️ Warning — A domain error code lacks the domain prefix (`domains/user` → `USER_*`)
 - ⚠️ Warning — `shared/` imports from a domain folder
 - ⚠️ Warning — A file in `shared/` is too large
@@ -268,6 +269,7 @@ Severity: 💡 Hint = information, ⚠️ Warning = likely problem, ❌ Error = 
 - 💡 Hint — A store filter or search query has column names or operators typed as open types such as `string` (use a union of literals defined by the store)
 - 💡 Hint — A store function is called inside a loop (`for` / `forEach` / `map`, etc.), which can cause N+1 queries (add a batch function to the store)
 - 💡 Hint — `logic.ts` exceeds ~300 lines or ~10 functions (consider splitting into `logic/`)
+- 💡 Hint — A domain store reads a table owned by another domain directly (an inventory hint in Lv6–Lv9; in Lv10, move it to a `query/` read-side adapter)
 - 💡 Hint — A domain store touches a table with no declared owner (declare it under `tables` in `slime.config.ts`)
 - 💡 Hint — A workflow is not referenced by any route (unreachable workflow candidate)
 - 💡 Hint — A domain folder has no `routes.ts`

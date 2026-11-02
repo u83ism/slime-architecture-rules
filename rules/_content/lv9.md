@@ -142,7 +142,7 @@ infrastructure/*/      →  domains/xxx/workflow.ts                        ❌
 ## Domain Folder Rules (unchanged from Lv6–Lv8)
 
 - Domain folders: `domains/<kebab-case>/`. Inter-domain imports follow the declared dependency DAG (see Lv6).
-- Table ownership (see Lv6) now applies to `infrastructure/<domain>/` adapters: an adapter touches only the tables its domain owns.
+- Table ownership (see Lv6) now applies to `infrastructure/<domain>/` adapters: an adapter writes only to the tables its domain owns. Direct reads of other domains' tables are tolerated as a 💡 Hint, as in Lv6.
 - All Lv1–Lv8 layer rules apply within each domain.
 
 ### Layer rules within each domain
@@ -255,7 +255,6 @@ Severity: 💡 Hint = information, ⚠️ Warning = likely problem, ❌ Error = 
 - ⚠️ Warning — `logic.ts` exceeds ~500 lines, mixes domain prefixes, or contains function groups whose type dependencies do not intersect
 - ⚠️ Warning — A workflow throws a `DomainError` (from Lv5, return `err()` up to the route instead)
 - ⚠️ Warning — A folder directly under `domains/` or `orchestrate/` is not named in kebab-case
-- ⚠️ Warning — A domain store reads a table owned by another domain directly (go through the owning domain's functions; Lv10 read-side adapters are exempt)
 - ⚠️ Warning — A domain error code lacks the domain prefix (`domains/user` → `USER_*`)
 - ⚠️ Warning — `shared/` imports from a domain folder
 - ⚠️ Warning — `app/route.ts` defines routes (move them to `domains/xxx/routes.ts`)
@@ -276,6 +275,7 @@ Severity: 💡 Hint = information, ⚠️ Warning = likely problem, ❌ Error = 
 - 💡 Hint — A store filter or search query has column names or operators typed as open types such as `string` (use a union of literals defined by the store)
 - 💡 Hint — A store function is called inside a loop (`for` / `forEach` / `map`, etc.), which can cause N+1 queries (add a batch function to the store)
 - 💡 Hint — `logic.ts` exceeds ~300 lines or ~10 functions (consider splitting into `logic/`)
+- 💡 Hint — A domain store reads a table owned by another domain directly (an inventory hint in Lv6–Lv9; in Lv10, move it to a `query/` read-side adapter)
 - 💡 Hint — A domain store touches a table with no declared owner (declare it under `tables` in `slime.config.ts`)
 - 💡 Hint — A workflow is not referenced by any route (unreachable workflow candidate)
 - 💡 Hint — A domain folder has no `routes.ts`

@@ -300,7 +300,7 @@ Slimeが自動カバーする範囲：Parse失敗→400 / Middleware拒否→401
 - 依存宣言にないdomain間のimport → ❌ Error
 - domain間の依存宣言に循環がある → ❌ Error
 - domainのstoreが、他domainの所有するテーブルに書き込んでいる → ❌ Error
-- domainのstoreが、他domainの所有するテーブルを直接読んでいる（所有domainの関数を経由する。Lv10の読み取り側アダプターは除く） → ⚠️ Warning
+- domainのstoreが、他domainの所有するテーブルを直接読んでいる（Lv6〜9は棚卸しのHint。Lv10では `query/` の読み取り側アダプターに寄せる） → 💡 Hint
 - 1つのテーブルを複数のdomainが所有宣言している → ❌ Error
 - domainのstoreが、所有の宣言されていないテーブルに触れている（`slime.config.ts` の `tables` に宣言する） → 💡 Hint
 - `client/client.ts` を直接importしている（`client/adapter.ts` を経由していない） → ❌ Error
@@ -395,6 +395,7 @@ return slime.withTransaction(async () => {
 
 #### Kaachanのお叱りポイント
 <!-- BEGIN GENERATED: kaachan-checks lv=10 （src/rules-catalog.ts から自動生成。手で編集しない） -->
+- domainのstoreが、他domainの所有するテーブルを直接読んでいる（Lv6〜9は棚卸しのHint。Lv10では `query/` の読み取り側アダプターに寄せる） → ⚠️ Warning（Lv9の💡 Hintから変更）
 - domainフォルダに `command/` と `query/` がない → ⚠️ Warning
 - `command/` が `query/` をimportしている（ReadPortを含む） → ❌ Error
 - `query/` がWritePortや書き込み用アダプターをimportしている → ❌ Error

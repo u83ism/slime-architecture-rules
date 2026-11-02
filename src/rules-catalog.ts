@@ -301,10 +301,10 @@ export const RULE_CATALOG: readonly RuleDefinition[] = [
   {
     id: "table-foreign-read",
     summary: {
-      ja: "domainのstoreが、他domainの所有するテーブルを直接読んでいる（所有domainの関数を経由する。Lv10の読み取り側アダプターは除く）",
-      en: "A domain store reads a table owned by another domain directly (go through the owning domain's functions; Lv10 read-side adapters are exempt)",
+      ja: "domainのstoreが、他domainの所有するテーブルを直接読んでいる（Lv6〜9は棚卸しのHint。Lv10では `query/` の読み取り側アダプターに寄せる）",
+      en: "A domain store reads a table owned by another domain directly (an inventory hint in Lv6–Lv9; in Lv10, move it to a `query/` read-side adapter)",
     },
-    severity: [[6, "warning"]],
+    severity: [[6, "hint"], [10, "warning"]],
   },
   {
     id: "table-owner-duplicate",
