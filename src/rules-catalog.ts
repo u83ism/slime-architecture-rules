@@ -357,16 +357,16 @@ export const RULE_CATALOG: readonly RuleDefinition[] = [
   {
     id: "shared-size",
     summary: {
-      ja: "`shared/` のファイルが肥大化している",
-      en: "A file in `shared/` is too large",
+      ja: "`shared/` のファイルが肥大化している（1ファイル500行超）",
+      en: "A file in `shared/` is too large (over 500 lines)",
     },
     severity: [[6, "warning"], [7, "error"]],
   },
   {
     id: "app-size",
     summary: {
-      ja: "App層が肥大化している",
-      en: "The App layer is too large",
+      ja: "App層が肥大化している（`app/` の1ファイル500行超）",
+      en: "The App layer is too large (a file in `app/` over 500 lines)",
     },
     severity: [[6, "warning"], [7, "error"]],
   },
@@ -405,8 +405,8 @@ export const RULE_CATALOG: readonly RuleDefinition[] = [
   {
     id: "app-route-size",
     summary: {
-      ja: "`app/route.ts` が肥大化している",
-      en: "`app/route.ts` is too large",
+      ja: "`app/route.ts` が肥大化している（500行超）",
+      en: "`app/route.ts` is too large (over 500 lines)",
     },
     severity: [[6, "warning"]],
   },
@@ -606,8 +606,8 @@ export const RULE_CATALOG: readonly RuleDefinition[] = [
   {
     id: "cqrs-folders-missing",
     summary: {
-      ja: "domainフォルダに `command/` と `query/` がない",
-      en: "A domain folder has no `command/` and `query/` subfolders",
+      ja: "domainフォルダに `command/` と `query/` がない（書き込みの `workflow.ts` を持たない上流domainは対象外）",
+      en: "A domain folder has no `command/` and `query/` subfolders (upstream domains without a write `workflow.ts` are exempt)",
     },
     severity: [[10, "warning"]],
   },

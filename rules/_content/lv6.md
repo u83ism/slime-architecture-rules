@@ -253,12 +253,12 @@ Severity: 💡 Hint = information, ⚠️ Warning = likely problem, ❌ Error = 
 - ⚠️ Warning — A folder directly under `domains/` or `orchestrate/` is not named in kebab-case
 - ⚠️ Warning — A domain error code lacks the domain prefix (`domains/user` → `USER_*`)
 - ⚠️ Warning — `shared/` imports from a domain folder
-- ⚠️ Warning — A file in `shared/` is too large
-- ⚠️ Warning — The App layer is too large
+- ⚠️ Warning — A file in `shared/` is too large (over 500 lines)
+- ⚠️ Warning — The App layer is too large (a file in `app/` over 500 lines)
 - ⚠️ Warning — `app/store.ts` exists (the App layer must not own DB access)
 - ⚠️ Warning — The App layer contains logic (`app/logic.ts` or business judgment)
 - ⚠️ Warning — `app/route.ts` defines routes (move them to `domains/xxx/routes.ts`)
-- ⚠️ Warning — `app/route.ts` is too large
+- ⚠️ Warning — `app/route.ts` is too large (over 500 lines)
 - ⚠️ Warning — A route references a workflow file that does not exist (dead route candidate)
 - ⚠️ Warning — A route past its `sunset` date still exists
 - 💡 Hint — API routes are defined outside an `/api` group

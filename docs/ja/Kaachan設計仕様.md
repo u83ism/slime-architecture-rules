@@ -162,12 +162,27 @@ workflow.ts または logic.ts が 300行 / 関数10個 を超えている場合
 
 **KaachanのHintとrulesファイルの閾値を同じ数値に保つ**ことが重要で、「Kaachanが警告を出す」→「AIが提案を続ける」という一貫したメッセージをユーザーが受け取れる。
 
-### rulesファイルのフォーマット問題
+閾値は、rulesテンプレート（`rules/_content/lv*.md`）にKaachanの既定値と同じ数値を書いておく形で同期する。`export:rules` はテンプレートをそのまま出力し、数値を差し込む処理は持たない。閾値をCLIから変える手段もないので、ずれは生じない（閾値を変えられるようにするときは、差し込み処理と合わせて設計し直す）。
 
-現時点でrulesファイルのフォーマットは乱立しており（`.cursor/rules`・`CLAUDE.md`・`.clinerules`・`GEMINI.md`等）、対応ツールを引数で指定するか全フォーマット一括生成とするかも含め、実装方針は未定。
+### rulesファイルの出力先
+
+`export:rules` の出力先は、共有パッケージの `RULES_TARGETS`（`src/rules-targets.ts`）が正。対応ツールと配置先は [AI-rulesテンプレート 設計方針](./AI-rulesテンプレート%20設計方針.md) を参照。
+
+| `--target` | 出力先 |
+|---|---|
+| `claude` | `CLAUDE.md` |
+| `codex` | `AGENTS.md` |
+| `gemini` | `.gemini/styleguide.md` |
+| `cursor` | `.cursor/rules/slime.mdc` |
 
 ```bash
-slime export:rules --target cursor   # .cursor/rulesのみ生成
-slime export:rules --target claude   # CLAUDE.mdのみ生成
-slime export:rules                   # 全フォーマット一括生成（デフォルト候補）
+slime export:rules --target cursor   # .cursor/rules/slime.mdc のみ生成
+slime export:rules --target claude   # CLAUDE.md のみ生成
+slime export:rules                   # 全ターゲットを一括生成（デフォルト候補）
 ```
+
+---
+
+## opt-inのルール
+
+検査項目の一覧で「opt-in」と書いたルール（`defer-suggestion` 等）は、既定では報告しない。誤検知が多くなりやすく、全員に出すとノイズになるためである。使うときは、ルールごとに明示して有効にする。CLIでは `--enable-rule defer-suggestion` のように指定し、設定ファイルでは `enabledRules` に列挙する（`enabledRules: ["defer-suggestion"]`）。

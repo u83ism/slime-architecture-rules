@@ -836,13 +836,13 @@ export const userRoutes = (r: Router) => {
 - domainのエラーコードにdomain名の接頭辞がない（`domains/user` なら `USER_*`） → ⚠️ Warning
 - `shared/` がdomainフォルダをimportしている → ⚠️ Warning
 - `shared/utility.ts` / `shared/smallLogic.ts` に副作用がある → ❌ Error
-- `shared/` のファイルが肥大化している → ⚠️ Warning
-- App層が肥大化している → ⚠️ Warning
+- `shared/` のファイルが肥大化している（1ファイル500行超） → ⚠️ Warning
+- App層が肥大化している（`app/` の1ファイル500行超） → ⚠️ Warning
 - `app/store.ts` が存在する（App層はDBアクセスを持たない） → ⚠️ Warning
 - `app/client.ts` が存在する（`client/` へ移動する） → ❌ Error
 - App層がlogicを持っている（`app/logic.ts` またはビジネス判断の混在） → ⚠️ Warning
 - `app/route.ts` にルート定義がある（`domains/xxx/routes.ts` へ移動する） → ⚠️ Warning
-- `app/route.ts` が肥大化している → ⚠️ Warning
+- `app/route.ts` が肥大化している（500行超） → ⚠️ Warning
 - ルート定義が存在しないWorkflowファイルを参照している（死んだルート候補） → ⚠️ Warning
 - どのルートからも参照されていないWorkflowがある（到達不能Workflow候補） → 💡 Hint
 - domainフォルダに `routes.ts` がない → 💡 Hint
@@ -977,8 +977,8 @@ Lv6のドメイン間依存宣言（DAG）に吸収された。入れ子のdomai
 
 <!-- BEGIN GENERATED: kaachan-checks lv=7 （src/rules-catalog.ts から自動生成。手で編集しない） -->
 - logic に対応するテストファイル（`logic.test.ts`）がない → ❌ Error（Lv6の⚠️ Warningから変更）
-- `shared/` のファイルが肥大化している → ❌ Error（Lv6の⚠️ Warningから変更）
-- App層が肥大化している → ❌ Error（Lv6の⚠️ Warningから変更）
+- `shared/` のファイルが肥大化している（1ファイル500行超） → ❌ Error（Lv6の⚠️ Warningから変更）
+- App層が肥大化している（`app/` の1ファイル500行超） → ❌ Error（Lv6の⚠️ Warningから変更）
 - `app/store.ts` が存在する（App層はDBアクセスを持たない） → ❌ Error（Lv6の⚠️ Warningから変更）
 - App層がlogicを持っている（`app/logic.ts` またはビジネス判断の混在） → ❌ Error（Lv6の⚠️ Warningから変更）
 - domainが `orchestrate/` フォルダをimportしている → ❌ Error
@@ -1210,14 +1210,14 @@ block-beta
   space:7
   Linfra["infrastructure/"] space space space space space adapter["xxx/prismaAdapter.ts<br>ports.ts を実装"]
   space:7
-  Lauth["domains/auth/<br>最上流"] space space space authwf["workflow.ts"] authlogic["logic.ts"] authports["ports.ts"]
+  Lauth["domains/auth/<br>最上流"] space space space space authlogic["logic.ts"] authports["ports.ts"]
   route --> routes
   routes --> mw
   mw --> parse
   parse --> wf
   awf --> owf
   owf --> wf
-  wf --> authwf
+  wf --> authlogic
   class Lapp,Lorc,Ldom,Linfra,Lauth lane
   class awf,wf,ports,adapter,authports new
 
@@ -1382,6 +1382,8 @@ src/
 
 domainが書き込み（`command/`）と読み取り（`query/`）の2行に分かれる。`orchestrate/`・`domains/auth/`・`shared/`・`client/` はLv9と同じなので省略。
 
+`command/` と `query/` に分けるのは、書き込みの `workflow.ts` を持つdomainだけである。`domains/auth/` のように判断（`logic.ts`）とPort（`ports.ts`）だけを提供する上流domainは、分ける対象がないのでLv9の形のままでよい（Kaachanの `cqrs-folders-missing` もこれを対象外にする）。
+
 ```mermaid
 block-beta
   columns 7
@@ -1479,7 +1481,7 @@ export const userQueryAdapter: UserReadPort = {
 
 <!-- BEGIN GENERATED: kaachan-checks lv=10 （src/rules-catalog.ts から自動生成。手で編集しない） -->
 - domainのstoreが、他domainの所有するテーブルを直接読んでいる（Lv6〜9は棚卸しのHint。Lv10では `query/` の読み取り側アダプターに寄せる） → ⚠️ Warning（Lv9の💡 Hintから変更）
-- domainフォルダに `command/` と `query/` がない → ⚠️ Warning
+- domainフォルダに `command/` と `query/` がない（書き込みの `workflow.ts` を持たない上流domainは対象外） → ⚠️ Warning
 - `command/` が `query/` をimportしている（ReadPortを含む） → ❌ Error
 - `query/` がWritePortや書き込み用アダプターをimportしている → ❌ Error
 - `query/` が書き込み操作を行っている → ❌ Error
@@ -1643,13 +1645,13 @@ Slime Architectureが扱うのは**アプリコードをどこにどう書くか
 | `error-code-missing-prefix` | domainのエラーコードにdomain名の接頭辞がない（`domains/user` なら `USER_*`） | — | — | — | — | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
 | `shared-imports-domain` | `shared/` がdomainフォルダをimportしている | — | — | — | — | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
 | `shared-side-effects` | `shared/utility.ts` / `shared/smallLogic.ts` に副作用がある | — | — | — | — | ❌ | ❌ | ❌ | ❌ | ❌ |
-| `shared-size` | `shared/` のファイルが肥大化している | — | — | — | — | ⚠️ | ❌ | ❌ | ❌ | ❌ |
-| `app-size` | App層が肥大化している | — | — | — | — | ⚠️ | ❌ | ❌ | ❌ | ❌ |
+| `shared-size` | `shared/` のファイルが肥大化している（1ファイル500行超） | — | — | — | — | ⚠️ | ❌ | ❌ | ❌ | ❌ |
+| `app-size` | App層が肥大化している（`app/` の1ファイル500行超） | — | — | — | — | ⚠️ | ❌ | ❌ | ❌ | ❌ |
 | `app-owns-store` | `app/store.ts` が存在する（App層はDBアクセスを持たない） | — | — | — | — | ⚠️ | ❌ | ❌ | ❌ | ❌ |
 | `app-owns-client` | `app/client.ts` が存在する（`client/` へ移動する） | — | — | — | — | ❌ | ❌ | ❌ | ❌ | ❌ |
 | `app-owns-logic` | App層がlogicを持っている（`app/logic.ts` またはビジネス判断の混在） | — | — | — | — | ⚠️ | ❌ | ❌ | ❌ | ❌ |
 | `app-route-defines-routes` | `app/route.ts` にルート定義がある（`domains/xxx/routes.ts` へ移動する） | — | — | — | — | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
-| `app-route-size` | `app/route.ts` が肥大化している | — | — | — | — | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
+| `app-route-size` | `app/route.ts` が肥大化している（500行超） | — | — | — | — | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
 | `route-dead-target` | ルート定義が存在しないWorkflowファイルを参照している（死んだルート候補） | — | — | — | — | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
 | `workflow-unreachable` | どのルートからも参照されていないWorkflowがある（到達不能Workflow候補） | — | — | — | — | 💡 | 💡 | 💡 | 💡 | 💡 |
 | `domain-missing-routes` | domainフォルダに `routes.ts` がない | — | — | — | — | 💡 | 💡 | 💡 | 💡 | 💡 |
@@ -1673,7 +1675,7 @@ Slime Architectureが扱うのは**アプリコードをどこにどう書くか
 | `ports-has-implementation` | `ports.ts` に実装コードがある（型定義のみ） | — | — | — | — | — | — | — | ❌ | ❌ |
 | `store-remains` | `store.ts` がまだ残っている（`ports.ts` と `infrastructure/` に分離する） | — | — | — | — | — | — | — | ❌ | ❌ |
 | `workflow-not-port-injected` | `ports.ts` があるのに、workflowがPortを引数で受け取っていない | — | — | — | — | — | — | — | 💡 | 💡 |
-| `cqrs-folders-missing` | domainフォルダに `command/` と `query/` がない | — | — | — | — | — | — | — | — | ⚠️ |
+| `cqrs-folders-missing` | domainフォルダに `command/` と `query/` がない（書き込みの `workflow.ts` を持たない上流domainは対象外） | — | — | — | — | — | — | — | — | ⚠️ |
 | `command-imports-query` | `command/` が `query/` をimportしている（ReadPortを含む） | — | — | — | — | — | — | — | — | ❌ |
 | `query-imports-write-port` | `query/` がWritePortや書き込み用アダプターをimportしている | — | — | — | — | — | — | — | — | ❌ |
 | `query-writes` | `query/` が書き込み操作を行っている | — | — | — | — | — | — | — | — | ❌ |

@@ -307,13 +307,13 @@ Slimeが自動カバーする範囲：Parse失敗→400 / Middleware拒否→401
 - domainのエラーコードにdomain名の接頭辞がない（`domains/user` なら `USER_*`） → ⚠️ Warning
 - `shared/` がdomainフォルダをimportしている → ⚠️ Warning
 - `shared/utility.ts` / `shared/smallLogic.ts` に副作用がある → ❌ Error
-- `shared/` のファイルが肥大化している → ⚠️ Warning
-- App層が肥大化している → ⚠️ Warning
+- `shared/` のファイルが肥大化している（1ファイル500行超） → ⚠️ Warning
+- App層が肥大化している（`app/` の1ファイル500行超） → ⚠️ Warning
 - `app/store.ts` が存在する（App層はDBアクセスを持たない） → ⚠️ Warning
 - `app/client.ts` が存在する（`client/` へ移動する） → ❌ Error
 - App層がlogicを持っている（`app/logic.ts` またはビジネス判断の混在） → ⚠️ Warning
 - `app/route.ts` にルート定義がある（`domains/xxx/routes.ts` へ移動する） → ⚠️ Warning
-- `app/route.ts` が肥大化している → ⚠️ Warning
+- `app/route.ts` が肥大化している（500行超） → ⚠️ Warning
 - ルート定義が存在しないWorkflowファイルを参照している（死んだルート候補） → ⚠️ Warning
 - どのルートからも参照されていないWorkflowがある（到達不能Workflow候補） → 💡 Hint
 - domainフォルダに `routes.ts` がない → 💡 Hint
@@ -347,8 +347,8 @@ return slime.withTransaction(async () => {
 #### Kaachanのお叱りポイント
 <!-- BEGIN GENERATED: kaachan-checks lv=7 （src/rules-catalog.ts から自動生成。手で編集しない） -->
 - logic に対応するテストファイル（`logic.test.ts`）がない → ❌ Error（Lv6の⚠️ Warningから変更）
-- `shared/` のファイルが肥大化している → ❌ Error（Lv6の⚠️ Warningから変更）
-- App層が肥大化している → ❌ Error（Lv6の⚠️ Warningから変更）
+- `shared/` のファイルが肥大化している（1ファイル500行超） → ❌ Error（Lv6の⚠️ Warningから変更）
+- App層が肥大化している（`app/` の1ファイル500行超） → ❌ Error（Lv6の⚠️ Warningから変更）
 - `app/store.ts` が存在する（App層はDBアクセスを持たない） → ❌ Error（Lv6の⚠️ Warningから変更）
 - App層がlogicを持っている（`app/logic.ts` またはビジネス判断の混在） → ❌ Error（Lv6の⚠️ Warningから変更）
 - domainが `orchestrate/` フォルダをimportしている → ❌ Error
@@ -396,7 +396,7 @@ return slime.withTransaction(async () => {
 #### Kaachanのお叱りポイント
 <!-- BEGIN GENERATED: kaachan-checks lv=10 （src/rules-catalog.ts から自動生成。手で編集しない） -->
 - domainのstoreが、他domainの所有するテーブルを直接読んでいる（Lv6〜9は棚卸しのHint。Lv10では `query/` の読み取り側アダプターに寄せる） → ⚠️ Warning（Lv9の💡 Hintから変更）
-- domainフォルダに `command/` と `query/` がない → ⚠️ Warning
+- domainフォルダに `command/` と `query/` がない（書き込みの `workflow.ts` を持たない上流domainは対象外） → ⚠️ Warning
 - `command/` が `query/` をimportしている（ReadPortを含む） → ❌ Error
 - `query/` がWritePortや書き込み用アダプターをimportしている → ❌ Error
 - `query/` が書き込み操作を行っている → ❌ Error

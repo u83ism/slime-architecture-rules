@@ -229,8 +229,8 @@ Severity: 💡 Hint = information, ⚠️ Warning = likely problem, ❌ Error = 
 - ❌ Error — More than one domain declares ownership of the same table
 - ❌ Error — `client/client.ts` is imported directly (bypassing `client/adapter.ts`)
 - ❌ Error — `shared/utility.ts` or `shared/smallLogic.ts` has side effects
-- ❌ Error — A file in `shared/` is too large
-- ❌ Error — The App layer is too large
+- ❌ Error — A file in `shared/` is too large (over 500 lines)
+- ❌ Error — The App layer is too large (a file in `app/` over 500 lines)
 - ❌ Error — `app/store.ts` exists (the App layer must not own DB access)
 - ❌ Error — `app/client.ts` exists (move it to `client/`)
 - ❌ Error — The App layer contains logic (`app/logic.ts` or business judgment)
@@ -258,7 +258,7 @@ Severity: 💡 Hint = information, ⚠️ Warning = likely problem, ❌ Error = 
 - ⚠️ Warning — A domain error code lacks the domain prefix (`domains/user` → `USER_*`)
 - ⚠️ Warning — `shared/` imports from a domain folder
 - ⚠️ Warning — `app/route.ts` defines routes (move them to `domains/xxx/routes.ts`)
-- ⚠️ Warning — `app/route.ts` is too large
+- ⚠️ Warning — `app/route.ts` is too large (over 500 lines)
 - ⚠️ Warning — A route references a workflow file that does not exist (dead route candidate)
 - ⚠️ Warning — A route past its `sunset` date still exists
 - ⚠️ Warning — `shared/events.ts` does not exist
