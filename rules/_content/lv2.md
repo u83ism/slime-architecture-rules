@@ -96,6 +96,7 @@ export const CreateUserWorkflow = async (req: Request, res: Response) => {
 <!-- BEGIN GENERATED: kaachan-checks lv=2 （src/rules-catalog.ts から自動生成。手で編集しない） -->
 Severity: 💡 Hint = information, ⚠️ Warning = likely problem, ❌ Error = violates this level's rules.
 
+- ⚠️ Warning — A file in a layer location has a name close to, but not matching, a recognized layer file (e.g. `workfow.ts`); the FW will not pick it up and the level is misjudged
 - ⚠️ Warning — `workflow.ts` imports an auth library directly (that is middleware's job)
 - ⚠️ Warning — `workflow.ts` exceeds ~500 lines
 - 💡 Hint — API routes are defined outside an `/api` group

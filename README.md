@@ -110,6 +110,17 @@ FOLDER_PATTERNS.KEBAB_CASE.test("order-item") // true  domains/・orchestrate/ �
 FOLDER_PATTERNS.KEBAB_CASE.test("orderItem")  // false
 ```
 
+### `RECOGNIZED_FILES` / `LAYER_FILE_TYPO_DISTANCE`
+
+層ファイルを置く場所（src/ からの相対パス）と、そこで認識されるファイル名の一覧。Slime FW はこの名前でファイルを見つけ、Kaachan はこの名前で到達Lvを判定します。Kaachan の `layer-file-typo`（近いが一致しない名前）と `layer-file-unknown`（規約にない名前）はこの一覧を基準にします。
+
+```ts
+import { RECOGNIZED_FILES } from "@u83ism/architecture-rules"
+
+const domain = RECOGNIZED_FILES.find((p) => p.path === "domains/*")
+domain?.files.includes("routes.ts") // true
+```
+
 ### `DomainDependencies`
 
 ドメイン間の依存宣言（Lv6以降）の型。宣言にない向きの import と、宣言そのものの循環は Kaachan が Error として検出します。

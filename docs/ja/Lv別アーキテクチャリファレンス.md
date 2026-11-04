@@ -74,7 +74,7 @@ route.group({ prefix: '/api' }, (r) => {
 ### Kaachanが検査する項目
 
 <!-- BEGIN GENERATED: kaachan-checks lv=1 （src/rules-catalog.ts から自動生成。手で編集しない） -->
-なし（このLvで検査する項目はない）
+- 層ファイルの置き場所に、認識されるファイル名に近いが一致しない名前のファイルがある（`workfow.ts` 等。FWに認識されず、Lvの判定もずれる） → ⚠️ Warning
 <!-- END GENERATED -->
 
 ### 🆕 Lv1で追加されたこと
@@ -152,6 +152,7 @@ route.get('/health', HealthCheckWorkflow)  // /api/ の外
 - `workflow.ts` が認証ライブラリを直接importしている（Middlewareの仕事） → ⚠️ Warning
 - `workflow.ts` が300行 / 10関数を超えている → 💡 Hint
 - `workflow.ts` が500行を超えている → ⚠️ Warning
+- Lv1までの検査はすべて継続する
 <!-- END GENERATED -->
 
 ### 🆕 Lv2で追加されたこと
@@ -292,6 +293,7 @@ Content-Type: application/problem+json
 ### Kaachanが検査する項目
 
 <!-- BEGIN GENERATED: kaachan-checks lv=3 （src/rules-catalog.ts から自動生成。手で編集しない） -->
+- 層ファイルの置き場所に、規約にない名前のファイルがある（`service.ts`・`utils.ts` 等。置くべき層を示す） → 💡 Hint
 - route のハンドラーがHTTPの入出力以外（store・logic・DBの呼び出し等）を行っている → ⚠️ Warning（Lv2の💡 Hintから変更）
 - parse がDB/ORMモジュールをimportしている → ❌ Error
 - workflow がHTTPのリクエスト・レスポンス・コンテキストに触れている → ⚠️ Warning
@@ -1606,84 +1608,86 @@ Slime Architectureが扱うのは**アプリコードをどこにどう書くか
 <!-- BEGIN GENERATED: kaachan-matrix （src/rules-catalog.ts から自動生成。手で編集しない） -->
 凡例：💡 Hint（情報提供）／⚠️ Warning（問題の可能性が高い）／❌ Error（そのLvのルール違反）／— 検査しない
 
-| ID | 検査項目 | Lv2 | Lv3 | Lv4 | Lv5 | Lv6 | Lv7 | Lv8 | Lv9 | Lv10 |
-|---|---|---|---|---|---|---|---|---|---|---|
-| `route-api-namespace` | `/api` グループの外でAPIルートを定義している | 💡 | 💡 | 💡 | 💡 | 💡 | 💡 | 💡 | 💡 | 💡 |
-| `route-handler-non-http` | route のハンドラーがHTTPの入出力以外（store・logic・DBの呼び出し等）を行っている | 💡 | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
-| `workflow-auth-import` | `workflow.ts` が認証ライブラリを直接importしている（Middlewareの仕事） | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
-| `workflow-size-hint` | `workflow.ts` が300行 / 10関数を超えている | 💡 | 💡 | 💡 | 💡 | 💡 | 💡 | 💡 | 💡 | 💡 |
-| `workflow-size-warning` | `workflow.ts` が500行を超えている | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
-| `parse-db-import` | parse がDB/ORMモジュールをimportしている | — | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| `workflow-http-access` | workflow がHTTPのリクエスト・レスポンス・コンテキストに触れている | — | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
-| `workflow-calls-parse` | workflow がparse関数を呼んでいる（parseはrouteで行う） | — | 💡 | 💡 | 💡 | 💡 | 💡 | 💡 | 💡 | 💡 |
-| `workflow-raw-parse` | workflow が `JSON.parse()` 等で入力を直接パースしている | — | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
-| `workflow-throws-plain-error` | workflow が素の `Error` を投げている（業務上の拒否なら500になる。Lv3〜4は `DomainError`、Lv5以降は `err()` を使う） | — | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
-| `slime-config-missing` | `slime.config.ts` がない（エラーコードとHTTPステータスの対応表を置く） | — | 💡 | 💡 | 💡 | 💡 | 💡 | 💡 | 💡 | 💡 |
-| `parse-size-hint` | `parse.ts` が300行 / 10関数を超えている（共通スキーマは許容） | — | 💡 | 💡 | 💡 | 💡 | 💡 | 💡 | 💡 | 💡 |
-| `parse-size-warning` | `parse.ts` が500行を超えている（`parse/` への分割を促す） | — | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
-| `parse-folder-file-too-large` | `parse/` 内のファイルが300行を超えている | — | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| `workflow-orm-import` | workflow がORM/DBモジュールを直接importしている | — | — | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| `workflow-orm-transaction` | workflow がORM固有のトランザクションAPIを直書きしている（`withTransaction()` を使う） | — | — | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
-| `store-naming` | store の関数名が命名規則（`find*` / `list*` / `get*` / `count*` / `search*` / `create*` / `save*` / `update*` / `delete*` / `remove*`）に違反している | — | — | 💡 | 💡 | ❌ | ❌ | ❌ | ❌ | ❌ |
-| `store-orm-return-type` | store がORM型を戻り値に使っている | — | — | ⚠️ | ⚠️ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| `store-orm-param` | store がORM型やクエリビルダーを引数に取っている（storeの外でクエリを組み立てられてしまう） | — | — | ⚠️ | ⚠️ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| `store-generic-filter` | store の絞り込み・検索条件の列名や演算子が `string` のような開いた型になっている（storeが決めたリテラルの合併型にする） | — | — | 💡 | 💡 | 💡 | 💡 | 💡 | 💡 | 💡 |
-| `store-call-in-loop` | store の関数をループ（`for` / `forEach` / `map` 等）の中で呼んでいる（N+1になりうる。一括取得の関数を store に用意する） | — | — | 💡 | 💡 | 💡 | 💡 | 💡 | 💡 | 💡 |
-| `logic-store-client-import` | logic が store / client / DB・ORMモジュールをimportしている | — | — | — | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| `logic-throws` | logic が throw している（Result型で返す） | — | — | — | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| `logic-missing-prefix` | logic関数にドメインprefixがない（`userCan*` 等） | — | — | — | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
-| `logic-test-missing` | logic に対応するテストファイル（`logic.test.ts`）がない | — | — | — | ⚠️ | ⚠️ | ❌ | ❌ | ❌ | ❌ |
-| `logic-size-hint` | `logic.ts` が300行 / 10関数を超えている（`logic/` への分割を促す） | — | — | — | 💡 | 💡 | 💡 | 💡 | 💡 | 💡 |
-| `logic-size-warning` | `logic.ts` が500行を超えている、prefixが混在している、または型依存が交差しない関数群がある | — | — | — | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
-| `logic-folder-file-too-large` | `logic/` 内のファイルが300行を超えている、またはprefixの混在が解消されていない | — | — | — | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| `workflow-throws-domain-error` | workflow が `DomainError` を投げている（Lv5以降は `err()` でrouteまで返す） | — | — | — | 💡 | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
-| `folder-name-not-kebab-case` | `domains/`・`orchestrate/` 直下のフォルダ名がkebab-caseでない | — | — | — | — | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
-| `domain-undeclared-import` | 依存宣言にないdomain間のimport | — | — | — | — | ❌ | ❌ | ❌ | ❌ | ❌ |
-| `domain-dependency-cycle` | domain間の依存宣言に循環がある | — | — | — | — | ❌ | ❌ | ❌ | ❌ | ❌ |
-| `table-foreign-write` | domainのstoreが、他domainの所有するテーブルに書き込んでいる | — | — | — | — | ❌ | ❌ | ❌ | ❌ | ❌ |
-| `table-foreign-read` | domainのstoreが、他domainの所有するテーブルを直接読んでいる（Lv6〜9は棚卸しのHint。Lv10では `query/` の読み取り側アダプターに寄せる） | — | — | — | — | 💡 | 💡 | 💡 | 💡 | ⚠️ |
-| `table-owner-duplicate` | 1つのテーブルを複数のdomainが所有宣言している | — | — | — | — | ❌ | ❌ | ❌ | ❌ | ❌ |
-| `table-owner-undeclared` | domainのstoreが、所有の宣言されていないテーブルに触れている（`slime.config.ts` の `tables` に宣言する） | — | — | — | — | 💡 | 💡 | 💡 | 💡 | 💡 |
-| `client-direct-import` | `client/client.ts` を直接importしている（`client/adapter.ts` を経由していない） | — | — | — | — | ❌ | ❌ | ❌ | ❌ | ❌ |
-| `error-code-missing-prefix` | domainのエラーコードにdomain名の接頭辞がない（`domains/user` なら `USER_*`） | — | — | — | — | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
-| `shared-imports-domain` | `shared/` がdomainフォルダをimportしている | — | — | — | — | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
-| `shared-side-effects` | `shared/utility.ts` / `shared/smallLogic.ts` に副作用がある | — | — | — | — | ❌ | ❌ | ❌ | ❌ | ❌ |
-| `shared-size` | `shared/` のファイルが肥大化している（1ファイル500行超） | — | — | — | — | ⚠️ | ❌ | ❌ | ❌ | ❌ |
-| `app-size` | App層が肥大化している（`app/` の1ファイル500行超） | — | — | — | — | ⚠️ | ❌ | ❌ | ❌ | ❌ |
-| `app-owns-store` | `app/store.ts` が存在する（App層はDBアクセスを持たない） | — | — | — | — | ⚠️ | ❌ | ❌ | ❌ | ❌ |
-| `app-owns-client` | `app/client.ts` が存在する（`client/` へ移動する） | — | — | — | — | ❌ | ❌ | ❌ | ❌ | ❌ |
-| `app-owns-logic` | App層がlogicを持っている（`app/logic.ts` またはビジネス判断の混在） | — | — | — | — | ⚠️ | ❌ | ❌ | ❌ | ❌ |
-| `app-route-defines-routes` | `app/route.ts` にルート定義がある（`domains/xxx/routes.ts` へ移動する） | — | — | — | — | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
-| `app-route-size` | `app/route.ts` が肥大化している（500行超） | — | — | — | — | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
-| `route-dead-target` | ルート定義が存在しないWorkflowファイルを参照している（死んだルート候補） | — | — | — | — | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
-| `workflow-unreachable` | どのルートからも参照されていないWorkflowがある（到達不能Workflow候補） | — | — | — | — | 💡 | 💡 | 💡 | 💡 | 💡 |
-| `domain-missing-routes` | domainフォルダに `routes.ts` がない | — | — | — | — | 💡 | 💡 | 💡 | 💡 | 💡 |
-| `route-sunset-passed` | `sunset` 日付を過ぎたルートが残っている | — | — | — | — | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
-| `domain-pair-coordinated` | App層や `orchestrate/` が同じdomainの組を繰り返し一緒に呼んでいる（統合や境界の見直しを検討する） | — | — | — | — | 💡 | 💡 | 💡 | 💡 | 💡 |
-| `domain-folder-thin` | 中身の薄いdomainフォルダがある（他のdomainへの統合を検討する） | — | — | — | — | 💡 | 💡 | 💡 | 💡 | 💡 |
-| `domain-imports-orchestrate` | domainが `orchestrate/` フォルダをimportしている | — | — | — | — | — | ❌ | ❌ | ❌ | ❌ |
-| `orchestrate-imports-orchestrate` | `orchestrate/` フォルダ同士がimportし合っている | — | — | — | — | — | ❌ | ❌ | ❌ | ❌ |
-| `orchestrate-imports-app` | `orchestrate/` フォルダが `app/` をimportしている | — | — | — | — | — | ❌ | ❌ | ❌ | ❌ |
-| `defer-suggestion` | `withTransaction()` 内に非DBの非同期処理（メール送信・外部API呼び出し等）がある（`defer()` を提案。opt-in） | — | — | — | — | — | 💡 | 💡 | 💡 | 💡 |
-| `events-imports-domain` | `shared/events.ts` がdomainや `orchestrate/` をimportしている | — | — | — | — | — | — | ❌ | ❌ | ❌ |
-| `event-class-type` | イベント型がクラスを含んでいる（純粋なデータ型のみ） | — | — | — | — | — | — | ❌ | ❌ | ❌ |
-| `event-missing-type-field` | イベント型に `type` フィールド（discriminated union）がない | — | — | — | — | — | — | ⚠️ | ⚠️ | ⚠️ |
-| `event-type-not-upper-snake` | イベント型の `type` が大文字スネークケースでない | — | — | — | — | — | — | ⚠️ | ⚠️ | ⚠️ |
-| `orchestrate-without-transaction` | `orchestrate/` フォルダに `withTransaction()` がない（ドメインイベントで代替できるはず） | — | — | — | — | — | — | ⚠️ | ⚠️ | ⚠️ |
-| `orchestrate-non-transactional-io` | `orchestrate/` フォルダがメール送信・外部API呼び出し等の非トランザクション処理を含んでいる | — | — | — | — | — | — | ⚠️ | ⚠️ | ⚠️ |
-| `infrastructure-missing` | domainに `ports.ts` があるのに `infrastructure/` フォルダが存在しない（Ports & Adaptersへの移行の途中） | — | — | — | — | — | — | — | ⚠️ | ⚠️ |
-| `domain-imports-infrastructure` | domainフォルダが `infrastructure/` を直接importしている | — | — | — | — | — | — | — | ❌ | ❌ |
-| `orm-outside-infrastructure` | ORM/DBモジュールのimportが `infrastructure/` 以外にある | — | — | — | — | — | — | — | ❌ | ❌ |
-| `ports-has-implementation` | `ports.ts` に実装コードがある（型定義のみ） | — | — | — | — | — | — | — | ❌ | ❌ |
-| `store-remains` | `store.ts` がまだ残っている（`ports.ts` と `infrastructure/` に分離する） | — | — | — | — | — | — | — | ❌ | ❌ |
-| `workflow-not-port-injected` | `ports.ts` があるのに、workflowがPortを引数で受け取っていない | — | — | — | — | — | — | — | 💡 | 💡 |
-| `cqrs-folders-missing` | domainフォルダに `command/` と `query/` がない（書き込みの `workflow.ts` を持たない上流domainは対象外） | — | — | — | — | — | — | — | — | ⚠️ |
-| `command-imports-query` | `command/` が `query/` をimportしている（ReadPortを含む） | — | — | — | — | — | — | — | — | ❌ |
-| `query-imports-write-port` | `query/` がWritePortや書き込み用アダプターをimportしている | — | — | — | — | — | — | — | — | ❌ |
-| `query-writes` | `query/` が書き込み操作を行っている | — | — | — | — | — | — | — | — | ❌ |
-| `command-returns-view-model` | `command/` のworkflowが読み取り最適化ビューモデルを返している | — | — | — | — | — | — | — | — | ⚠️ |
-| `query-multiple-per-file` | `query/` の1ファイルに複数のクエリがある（1ファイル1クエリ） | — | — | — | — | — | — | — | — | ⚠️ |
-| `query-shared-helper` | `query/` 内で共通化されたヘルパーが複数のクエリファイルから使われている | — | — | — | — | — | — | — | — | ⚠️ |
-| `query-imports-domain-logic` | `query/` がドメインのlogicをimportしている（ReadPortと読み取りモデルだけを使う） | — | — | — | — | — | — | — | — | ⚠️ |
-| `query-file-size` | `query/` のファイルが肥大化している | — | — | — | — | — | — | — | — | 💡 |
+| ID | 検査項目 | Lv1 | Lv2 | Lv3 | Lv4 | Lv5 | Lv6 | Lv7 | Lv8 | Lv9 | Lv10 |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| `layer-file-typo` | 層ファイルの置き場所に、認識されるファイル名に近いが一致しない名前のファイルがある（`workfow.ts` 等。FWに認識されず、Lvの判定もずれる） | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
+| `layer-file-unknown` | 層ファイルの置き場所に、規約にない名前のファイルがある（`service.ts`・`utils.ts` 等。置くべき層を示す） | — | — | 💡 | 💡 | 💡 | 💡 | 💡 | 💡 | 💡 | 💡 |
+| `route-api-namespace` | `/api` グループの外でAPIルートを定義している | — | 💡 | 💡 | 💡 | 💡 | 💡 | 💡 | 💡 | 💡 | 💡 |
+| `route-handler-non-http` | route のハンドラーがHTTPの入出力以外（store・logic・DBの呼び出し等）を行っている | — | 💡 | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
+| `workflow-auth-import` | `workflow.ts` が認証ライブラリを直接importしている（Middlewareの仕事） | — | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
+| `workflow-size-hint` | `workflow.ts` が300行 / 10関数を超えている | — | 💡 | 💡 | 💡 | 💡 | 💡 | 💡 | 💡 | 💡 | 💡 |
+| `workflow-size-warning` | `workflow.ts` が500行を超えている | — | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
+| `parse-db-import` | parse がDB/ORMモジュールをimportしている | — | — | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `workflow-http-access` | workflow がHTTPのリクエスト・レスポンス・コンテキストに触れている | — | — | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
+| `workflow-calls-parse` | workflow がparse関数を呼んでいる（parseはrouteで行う） | — | — | 💡 | 💡 | 💡 | 💡 | 💡 | 💡 | 💡 | 💡 |
+| `workflow-raw-parse` | workflow が `JSON.parse()` 等で入力を直接パースしている | — | — | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
+| `workflow-throws-plain-error` | workflow が素の `Error` を投げている（業務上の拒否なら500になる。Lv3〜4は `DomainError`、Lv5以降は `err()` を使う） | — | — | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
+| `slime-config-missing` | `slime.config.ts` がない（エラーコードとHTTPステータスの対応表を置く） | — | — | 💡 | 💡 | 💡 | 💡 | 💡 | 💡 | 💡 | 💡 |
+| `parse-size-hint` | `parse.ts` が300行 / 10関数を超えている（共通スキーマは許容） | — | — | 💡 | 💡 | 💡 | 💡 | 💡 | 💡 | 💡 | 💡 |
+| `parse-size-warning` | `parse.ts` が500行を超えている（`parse/` への分割を促す） | — | — | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
+| `parse-folder-file-too-large` | `parse/` 内のファイルが300行を超えている | — | — | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `workflow-orm-import` | workflow がORM/DBモジュールを直接importしている | — | — | — | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `workflow-orm-transaction` | workflow がORM固有のトランザクションAPIを直書きしている（`withTransaction()` を使う） | — | — | — | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
+| `store-naming` | store の関数名が命名規則（`find*` / `list*` / `get*` / `count*` / `search*` / `create*` / `save*` / `update*` / `delete*` / `remove*`）に違反している | — | — | — | 💡 | 💡 | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `store-orm-return-type` | store がORM型を戻り値に使っている | — | — | — | ⚠️ | ⚠️ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `store-orm-param` | store がORM型やクエリビルダーを引数に取っている（storeの外でクエリを組み立てられてしまう） | — | — | — | ⚠️ | ⚠️ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `store-generic-filter` | store の絞り込み・検索条件の列名や演算子が `string` のような開いた型になっている（storeが決めたリテラルの合併型にする） | — | — | — | 💡 | 💡 | 💡 | 💡 | 💡 | 💡 | 💡 |
+| `store-call-in-loop` | store の関数をループ（`for` / `forEach` / `map` 等）の中で呼んでいる（N+1になりうる。一括取得の関数を store に用意する） | — | — | — | 💡 | 💡 | 💡 | 💡 | 💡 | 💡 | 💡 |
+| `logic-store-client-import` | logic が store / client / DB・ORMモジュールをimportしている | — | — | — | — | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `logic-throws` | logic が throw している（Result型で返す） | — | — | — | — | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `logic-missing-prefix` | logic関数にドメインprefixがない（`userCan*` 等） | — | — | — | — | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
+| `logic-test-missing` | logic に対応するテストファイル（`logic.test.ts`）がない | — | — | — | — | ⚠️ | ⚠️ | ❌ | ❌ | ❌ | ❌ |
+| `logic-size-hint` | `logic.ts` が300行 / 10関数を超えている（`logic/` への分割を促す） | — | — | — | — | 💡 | 💡 | 💡 | 💡 | 💡 | 💡 |
+| `logic-size-warning` | `logic.ts` が500行を超えている、prefixが混在している、または型依存が交差しない関数群がある | — | — | — | — | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
+| `logic-folder-file-too-large` | `logic/` 内のファイルが300行を超えている、またはprefixの混在が解消されていない | — | — | — | — | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `workflow-throws-domain-error` | workflow が `DomainError` を投げている（Lv5以降は `err()` でrouteまで返す） | — | — | — | — | 💡 | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
+| `folder-name-not-kebab-case` | `domains/`・`orchestrate/` 直下のフォルダ名がkebab-caseでない | — | — | — | — | — | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
+| `domain-undeclared-import` | 依存宣言にないdomain間のimport | — | — | — | — | — | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `domain-dependency-cycle` | domain間の依存宣言に循環がある | — | — | — | — | — | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `table-foreign-write` | domainのstoreが、他domainの所有するテーブルに書き込んでいる | — | — | — | — | — | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `table-foreign-read` | domainのstoreが、他domainの所有するテーブルを直接読んでいる（Lv6〜9は棚卸しのHint。Lv10では `query/` の読み取り側アダプターに寄せる） | — | — | — | — | — | 💡 | 💡 | 💡 | 💡 | ⚠️ |
+| `table-owner-duplicate` | 1つのテーブルを複数のdomainが所有宣言している | — | — | — | — | — | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `table-owner-undeclared` | domainのstoreが、所有の宣言されていないテーブルに触れている（`slime.config.ts` の `tables` に宣言する） | — | — | — | — | — | 💡 | 💡 | 💡 | 💡 | 💡 |
+| `client-direct-import` | `client/client.ts` を直接importしている（`client/adapter.ts` を経由していない） | — | — | — | — | — | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `error-code-missing-prefix` | domainのエラーコードにdomain名の接頭辞がない（`domains/user` なら `USER_*`） | — | — | — | — | — | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
+| `shared-imports-domain` | `shared/` がdomainフォルダをimportしている | — | — | — | — | — | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
+| `shared-side-effects` | `shared/utility.ts` / `shared/smallLogic.ts` に副作用がある | — | — | — | — | — | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `shared-size` | `shared/` のファイルが肥大化している（1ファイル500行超） | — | — | — | — | — | ⚠️ | ❌ | ❌ | ❌ | ❌ |
+| `app-size` | App層が肥大化している（`app/` の1ファイル500行超） | — | — | — | — | — | ⚠️ | ❌ | ❌ | ❌ | ❌ |
+| `app-owns-store` | `app/store.ts` が存在する（App層はDBアクセスを持たない） | — | — | — | — | — | ⚠️ | ❌ | ❌ | ❌ | ❌ |
+| `app-owns-client` | `app/client.ts` が存在する（`client/` へ移動する） | — | — | — | — | — | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `app-owns-logic` | App層がlogicを持っている（`app/logic.ts` またはビジネス判断の混在） | — | — | — | — | — | ⚠️ | ❌ | ❌ | ❌ | ❌ |
+| `app-route-defines-routes` | `app/route.ts` にルート定義がある（`domains/xxx/routes.ts` へ移動する） | — | — | — | — | — | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
+| `app-route-size` | `app/route.ts` が肥大化している（500行超） | — | — | — | — | — | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
+| `route-dead-target` | ルート定義が存在しないWorkflowファイルを参照している（死んだルート候補） | — | — | — | — | — | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
+| `workflow-unreachable` | どのルートからも参照されていないWorkflowがある（到達不能Workflow候補） | — | — | — | — | — | 💡 | 💡 | 💡 | 💡 | 💡 |
+| `domain-missing-routes` | domainフォルダに `routes.ts` がない | — | — | — | — | — | 💡 | 💡 | 💡 | 💡 | 💡 |
+| `route-sunset-passed` | `sunset` 日付を過ぎたルートが残っている | — | — | — | — | — | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
+| `domain-pair-coordinated` | App層や `orchestrate/` が同じdomainの組を繰り返し一緒に呼んでいる（統合や境界の見直しを検討する） | — | — | — | — | — | 💡 | 💡 | 💡 | 💡 | 💡 |
+| `domain-folder-thin` | 中身の薄いdomainフォルダがある（他のdomainへの統合を検討する） | — | — | — | — | — | 💡 | 💡 | 💡 | 💡 | 💡 |
+| `domain-imports-orchestrate` | domainが `orchestrate/` フォルダをimportしている | — | — | — | — | — | — | ❌ | ❌ | ❌ | ❌ |
+| `orchestrate-imports-orchestrate` | `orchestrate/` フォルダ同士がimportし合っている | — | — | — | — | — | — | ❌ | ❌ | ❌ | ❌ |
+| `orchestrate-imports-app` | `orchestrate/` フォルダが `app/` をimportしている | — | — | — | — | — | — | ❌ | ❌ | ❌ | ❌ |
+| `defer-suggestion` | `withTransaction()` 内に非DBの非同期処理（メール送信・外部API呼び出し等）がある（`defer()` を提案。opt-in） | — | — | — | — | — | — | 💡 | 💡 | 💡 | 💡 |
+| `events-imports-domain` | `shared/events.ts` がdomainや `orchestrate/` をimportしている | — | — | — | — | — | — | — | ❌ | ❌ | ❌ |
+| `event-class-type` | イベント型がクラスを含んでいる（純粋なデータ型のみ） | — | — | — | — | — | — | — | ❌ | ❌ | ❌ |
+| `event-missing-type-field` | イベント型に `type` フィールド（discriminated union）がない | — | — | — | — | — | — | — | ⚠️ | ⚠️ | ⚠️ |
+| `event-type-not-upper-snake` | イベント型の `type` が大文字スネークケースでない | — | — | — | — | — | — | — | ⚠️ | ⚠️ | ⚠️ |
+| `orchestrate-without-transaction` | `orchestrate/` フォルダに `withTransaction()` がない（ドメインイベントで代替できるはず） | — | — | — | — | — | — | — | ⚠️ | ⚠️ | ⚠️ |
+| `orchestrate-non-transactional-io` | `orchestrate/` フォルダがメール送信・外部API呼び出し等の非トランザクション処理を含んでいる | — | — | — | — | — | — | — | ⚠️ | ⚠️ | ⚠️ |
+| `infrastructure-missing` | domainに `ports.ts` があるのに `infrastructure/` フォルダが存在しない（Ports & Adaptersへの移行の途中） | — | — | — | — | — | — | — | — | ⚠️ | ⚠️ |
+| `domain-imports-infrastructure` | domainフォルダが `infrastructure/` を直接importしている | — | — | — | — | — | — | — | — | ❌ | ❌ |
+| `orm-outside-infrastructure` | ORM/DBモジュールのimportが `infrastructure/` 以外にある | — | — | — | — | — | — | — | — | ❌ | ❌ |
+| `ports-has-implementation` | `ports.ts` に実装コードがある（型定義のみ） | — | — | — | — | — | — | — | — | ❌ | ❌ |
+| `store-remains` | `store.ts` がまだ残っている（`ports.ts` と `infrastructure/` に分離する） | — | — | — | — | — | — | — | — | ❌ | ❌ |
+| `workflow-not-port-injected` | `ports.ts` があるのに、workflowがPortを引数で受け取っていない | — | — | — | — | — | — | — | — | 💡 | 💡 |
+| `cqrs-folders-missing` | domainフォルダに `command/` と `query/` がない（書き込みの `workflow.ts` を持たない上流domainは対象外） | — | — | — | — | — | — | — | — | — | ⚠️ |
+| `command-imports-query` | `command/` が `query/` をimportしている（ReadPortを含む） | — | — | — | — | — | — | — | — | — | ❌ |
+| `query-imports-write-port` | `query/` がWritePortや書き込み用アダプターをimportしている | — | — | — | — | — | — | — | — | — | ❌ |
+| `query-writes` | `query/` が書き込み操作を行っている | — | — | — | — | — | — | — | — | — | ❌ |
+| `command-returns-view-model` | `command/` のworkflowが読み取り最適化ビューモデルを返している | — | — | — | — | — | — | — | — | — | ⚠️ |
+| `query-multiple-per-file` | `query/` の1ファイルに複数のクエリがある（1ファイル1クエリ） | — | — | — | — | — | — | — | — | — | ⚠️ |
+| `query-shared-helper` | `query/` 内で共通化されたヘルパーが複数のクエリファイルから使われている | — | — | — | — | — | — | — | — | — | ⚠️ |
+| `query-imports-domain-logic` | `query/` がドメインのlogicをimportしている（ReadPortと読み取りモデルだけを使う） | — | — | — | — | — | — | — | — | — | ⚠️ |
+| `query-file-size` | `query/` のファイルが肥大化している | — | — | — | — | — | — | — | — | — | 💡 |
 <!-- END GENERATED -->

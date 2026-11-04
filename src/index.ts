@@ -9,6 +9,8 @@ export {
   FOLDER_NAMES,
   FOLDER_PATTERNS,
   SHARED_EVENTS_FILE,
+  RECOGNIZED_FILES,
+  LAYER_FILE_TYPO_DISTANCE,
 } from "./layers.js"
 export type { LayerFile, FolderName } from "./layers.js"
 

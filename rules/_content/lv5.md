@@ -220,6 +220,7 @@ Severity: 💡 Hint = information, ⚠️ Warning = likely problem, ❌ Error = 
 - ❌ Error — logic imports store, client, or a DB/ORM module
 - ❌ Error — logic throws (return a `Result` instead)
 - ❌ Error — A file in `logic/` exceeds ~300 lines or still mixes domain prefixes
+- ⚠️ Warning — A file in a layer location has a name close to, but not matching, a recognized layer file (e.g. `workfow.ts`); the FW will not pick it up and the level is misjudged
 - ⚠️ Warning — A route handler does work other than HTTP I/O (store, logic, or DB calls)
 - ⚠️ Warning — `workflow.ts` imports an auth library directly (that is middleware's job)
 - ⚠️ Warning — `workflow.ts` exceeds ~500 lines
@@ -233,6 +234,7 @@ Severity: 💡 Hint = information, ⚠️ Warning = likely problem, ❌ Error = 
 - ⚠️ Warning — A logic function has no domain prefix (`userCan*`, etc.)
 - ⚠️ Warning — logic has no corresponding test file (`logic.test.ts`)
 - ⚠️ Warning — `logic.ts` exceeds ~500 lines, mixes domain prefixes, or contains function groups whose type dependencies do not intersect
+- 💡 Hint — A file in a layer location has a name the conventions do not define (e.g. `service.ts`, `utils.ts`); move it to the layer it belongs to
 - 💡 Hint — API routes are defined outside an `/api` group
 - 💡 Hint — `workflow.ts` exceeds ~300 lines or ~10 functions
 - 💡 Hint — A workflow calls a parse function (parsing belongs in route)

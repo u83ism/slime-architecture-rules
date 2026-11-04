@@ -91,7 +91,9 @@ const renderLevelAllEn = (level: ArchitectureLevel): string => {
 
 /** 全検査項目 × Lv の重大度一覧表（日本語） */
 const renderMatrixJa = (): string => {
-  const cols = LEVELS.filter((lv) => lv >= 2)
+  // 最も早く検査が始まるLvから列を出す
+  const firstLevel = Math.min(...RULE_CATALOG.map((rule) => rule.severity[0]?.[0] ?? 10))
+  const cols = LEVELS.filter((lv) => lv >= firstLevel)
   const cell = (rule: RuleDefinition, lv: ArchitectureLevel): string => {
     const s = getRuleSeverity(rule, lv)
     return s === undefined ? "—" : ICON[s]

@@ -228,6 +228,7 @@ Severity: 💡 Hint = information, ⚠️ Warning = likely problem, ❌ Error = 
 - ❌ Error — A domain imports from an `orchestrate/` folder
 - ❌ Error — An `orchestrate/` folder imports from another `orchestrate/` folder
 - ❌ Error — An `orchestrate/` folder imports from `app/`
+- ⚠️ Warning — A file in a layer location has a name close to, but not matching, a recognized layer file (e.g. `workfow.ts`); the FW will not pick it up and the level is misjudged
 - ⚠️ Warning — A route handler does work other than HTTP I/O (store, logic, or DB calls)
 - ⚠️ Warning — `workflow.ts` imports an auth library directly (that is middleware's job)
 - ⚠️ Warning — `workflow.ts` exceeds ~500 lines
@@ -246,6 +247,7 @@ Severity: 💡 Hint = information, ⚠️ Warning = likely problem, ❌ Error = 
 - ⚠️ Warning — `app/route.ts` is too large (over 500 lines)
 - ⚠️ Warning — A route references a workflow file that does not exist (dead route candidate)
 - ⚠️ Warning — A route past its `sunset` date still exists
+- 💡 Hint — A file in a layer location has a name the conventions do not define (e.g. `service.ts`, `utils.ts`); move it to the layer it belongs to
 - 💡 Hint — API routes are defined outside an `/api` group
 - 💡 Hint — `workflow.ts` exceeds ~300 lines or ~10 functions
 - 💡 Hint — A workflow calls a parse function (parsing belongs in route)

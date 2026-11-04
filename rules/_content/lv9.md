@@ -243,6 +243,7 @@ Severity: 💡 Hint = information, ⚠️ Warning = likely problem, ❌ Error = 
 - ❌ Error — An ORM/DB module is imported outside `infrastructure/`
 - ❌ Error — `ports.ts` contains implementation code (type definitions only)
 - ❌ Error — `store.ts` still exists (split it into `ports.ts` and `infrastructure/`)
+- ⚠️ Warning — A file in a layer location has a name close to, but not matching, a recognized layer file (e.g. `workfow.ts`); the FW will not pick it up and the level is misjudged
 - ⚠️ Warning — A route handler does work other than HTTP I/O (store, logic, or DB calls)
 - ⚠️ Warning — `workflow.ts` imports an auth library directly (that is middleware's job)
 - ⚠️ Warning — `workflow.ts` exceeds ~500 lines
@@ -266,6 +267,7 @@ Severity: 💡 Hint = information, ⚠️ Warning = likely problem, ❌ Error = 
 - ⚠️ Warning — An `orchestrate/` folder has no `withTransaction()` (domain events + `defer()` may suffice)
 - ⚠️ Warning — An `orchestrate/` folder contains non-transactional work (email, external API calls)
 - ⚠️ Warning — A domain has `ports.ts` but the `infrastructure/` folder does not exist (Ports & Adapters migration in progress)
+- 💡 Hint — A file in a layer location has a name the conventions do not define (e.g. `service.ts`, `utils.ts`); move it to the layer it belongs to
 - 💡 Hint — API routes are defined outside an `/api` group
 - 💡 Hint — `workflow.ts` exceeds ~300 lines or ~10 functions
 - 💡 Hint — A workflow calls a parse function (parsing belongs in route)

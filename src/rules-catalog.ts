@@ -25,6 +25,24 @@ export interface RuleDefinition {
 }
 
 export const RULE_CATALOG: readonly RuleDefinition[] = [
+  // ---- 全Lv: 層ファイルの名前（RECOGNIZED_FILES） ----
+  {
+    id: "layer-file-typo",
+    summary: {
+      ja: "層ファイルの置き場所に、認識されるファイル名に近いが一致しない名前のファイルがある（`workfow.ts` 等。FWに認識されず、Lvの判定もずれる）",
+      en: "A file in a layer location has a name close to, but not matching, a recognized layer file (e.g. `workfow.ts`); the FW will not pick it up and the level is misjudged",
+    },
+    severity: [[1, "warning"]],
+  },
+  {
+    id: "layer-file-unknown",
+    summary: {
+      ja: "層ファイルの置き場所に、規約にない名前のファイルがある（`service.ts`・`utils.ts` 等。置くべき層を示す）",
+      en: "A file in a layer location has a name the conventions do not define (e.g. `service.ts`, `utils.ts`); move it to the layer it belongs to",
+    },
+    severity: [[3, "hint"]],
+  },
+
   // ---- Lv2: route / middleware / workflow ----
   {
     id: "route-api-namespace",

@@ -183,6 +183,7 @@ route.post('/api', myCustomMiddleware, SomeWorkflow)
 - `workflow.ts` が認証ライブラリを直接importしている（Middlewareの仕事） → ⚠️ Warning
 - `workflow.ts` が300行 / 10関数を超えている → 💡 Hint
 - `workflow.ts` が500行を超えている → ⚠️ Warning
+- Lv1までの検査はすべて継続する
 <!-- END GENERATED -->
 
 ---
@@ -197,6 +198,7 @@ route.post('/api', myCustomMiddleware, SomeWorkflow)
 
 #### Kaachanのお叱りポイント
 <!-- BEGIN GENERATED: kaachan-checks lv=3 （src/rules-catalog.ts から自動生成。手で編集しない） -->
+- 層ファイルの置き場所に、規約にない名前のファイルがある（`service.ts`・`utils.ts` 等。置くべき層を示す） → 💡 Hint
 - route のハンドラーがHTTPの入出力以外（store・logic・DBの呼び出し等）を行っている → ⚠️ Warning（Lv2の💡 Hintから変更）
 - parse がDB/ORMモジュールをimportしている → ❌ Error
 - workflow がHTTPのリクエスト・レスポンス・コンテキストに触れている → ⚠️ Warning

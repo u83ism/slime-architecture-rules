@@ -161,6 +161,7 @@ Severity: 💡 Hint = information, ⚠️ Warning = likely problem, ❌ Error = 
 
 - ❌ Error — parse imports a DB/ORM module
 - ❌ Error — A file in `parse/` exceeds ~300 lines
+- ⚠️ Warning — A file in a layer location has a name close to, but not matching, a recognized layer file (e.g. `workfow.ts`); the FW will not pick it up and the level is misjudged
 - ⚠️ Warning — A route handler does work other than HTTP I/O (store, logic, or DB calls)
 - ⚠️ Warning — `workflow.ts` imports an auth library directly (that is middleware's job)
 - ⚠️ Warning — `workflow.ts` exceeds ~500 lines
@@ -168,6 +169,7 @@ Severity: 💡 Hint = information, ⚠️ Warning = likely problem, ❌ Error = 
 - ⚠️ Warning — A workflow parses raw input directly (e.g., `JSON.parse()`)
 - ⚠️ Warning — A workflow throws a plain `Error` (a business rejection would become HTTP 500; use `DomainError` at Lv3–4 and `err()` from Lv5)
 - ⚠️ Warning — `parse.ts` exceeds ~500 lines (split into `parse/`)
+- 💡 Hint — A file in a layer location has a name the conventions do not define (e.g. `service.ts`, `utils.ts`); move it to the layer it belongs to
 - 💡 Hint — API routes are defined outside an `/api` group
 - 💡 Hint — `workflow.ts` exceeds ~300 lines or ~10 functions
 - 💡 Hint — A workflow calls a parse function (parsing belongs in route)
