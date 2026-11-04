@@ -73,8 +73,12 @@ const userCanCreate = async (email: string): Result<...> => {
   const user = await findUserByEmail(email)  // ← Store呼びたくなる
   return user ? err("EXISTS") : ok()
 }
+```
 
+```ts
 // OK: Workflowがデータを解決してLogicにプリミティブを渡す
+const userCanCreate = (exists: boolean): Result<void, "EXISTS"> => exists ? err("EXISTS") : ok()
+
 const exists = await findUserByEmail(email)   // Workflow がStoreを呼ぶ
 const check = userCanCreate(!!exists)         // Logic はbooleanだけ受け取る
 ```
@@ -107,7 +111,7 @@ export const chargePayment = async (amount: number): Promise<Result<Receipt, "PA
     const res = await stripeClient.charge(amount)
     return ok(mapToReceipt(res))
   } catch (e) {
-    if (e.code === 'card_declined') return err("PAYMENT_DECLINED")  // DomainError → Result.err
+    if (e instanceof Error && "code" in e && e.code === 'card_declined') return err("PAYMENT_DECLINED")  // DomainError → Result.err
     throw e  // TechnicalError → throwのまま → 500
   }
 }

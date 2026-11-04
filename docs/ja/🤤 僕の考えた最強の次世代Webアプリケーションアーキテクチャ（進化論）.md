@@ -124,9 +124,10 @@ r.post('/user', json(parseCreateUser, CreateUserWorkflow))
 type CreateUserInput = { name: string; email: string }
 
 export const parseCreateUser = (input: unknown): CreateUserInput => {
-  if (!input.name) throw new Error("name required")
-  if (!input.email.includes("@")) throw new Error("invalid email")
-  return { name: input.name, email: input.email }
+  const { name, email } = (input ?? {}) as Record<string, unknown>
+  if (typeof name !== "string" || !name) throw new Error("name required")
+  if (typeof email !== "string" || !email.includes("@")) throw new Error("invalid email")
+  return { name, email }
 }
 
 // CreateUserWorkflow.ts（HTTPを知らない。型付きの入力を受け取るだけ）

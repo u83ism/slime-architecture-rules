@@ -164,7 +164,7 @@ export const chargePayment = async (amount: number): Promise<Result<Receipt, "PA
     const res = await stripeClient.charge(amount)
     return ok(mapToReceipt(res))
   } catch (e) {
-    if (e.code === 'card_declined') return err("PAYMENT_DECLINED")
+    if (e instanceof Error && "code" in e && e.code === 'card_declined') return err("PAYMENT_DECLINED")
     throw e
   }
 }

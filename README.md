@@ -203,6 +203,7 @@ Slime Architecture を実装するプロジェクトは複数あります。
 npm run typecheck      # 型チェック
 npm run build          # dist/ を生成
 npm run build:rules    # rules-catalog から検査項目一覧を生成し、ツール別 rules ファイルを rules/<tool>/ に出力
+npm run check:docs     # 文書中の TypeScript コード例を型チェック（構文・型の誤り、このパッケージのAPIの誤用）
 npm run build:qiita    # Qiita 投稿用の Markdown を qiita/ に出力（相対リンクを Qiita の URL に置換）
 ```
 

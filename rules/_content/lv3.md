@@ -102,7 +102,7 @@ export const parseCreateUser = (body: unknown): CreateUserInput => {
 }
 
 // NG — DB access inside parse
-export const parseCreateUser = async (body: unknown) => {
+export const parseCreateUser = async (body: { email: string }) => {
   const exists = await db.users.findByEmail(body.email) // wrong layer
 }
 ```

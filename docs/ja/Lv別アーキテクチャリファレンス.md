@@ -447,7 +447,7 @@ export const chargePayment = async (amount: number): Promise<Result<Receipt, "PA
   try {
     return ok(mapToReceipt(await stripeClient.charge(amount)))
   } catch (e) {
-    if (e.code === 'card_declined') return err("PAYMENT_DECLINED")
+    if (e instanceof Error && "code" in e && e.code === 'card_declined') return err("PAYMENT_DECLINED")
     throw e  // TechnicalError → 500
   }
 }
@@ -559,8 +559,12 @@ const userCanCreate = async (email: string) => {
   const user = await findUserByEmail(email)  // ← StoreをLogicから呼ぼうとしている
   return user ? err("EXISTS") : ok()
 }
+```
 
+```ts
 // OK: Workflowがデータを解決してLogicにプリミティブを渡す
+const userCanCreate = (exists: boolean): Result<void, "EXISTS"> => exists ? err("EXISTS") : ok()
+
 const exists = await findUserByEmail(email)  // WorkflowがStoreを呼ぶ
 const check = userCanCreate(!!exists)        // LogicはBooleanだけ受け取る
 ```
@@ -1472,7 +1476,7 @@ export const userQueryAdapter: UserReadPort = {
     .then(rs => new Map(rs.map(r => [r.id, mapToView(r)]))),
   list: (filter, page) => prisma.user.findMany({ where: toWhere(filter), select: viewFields, ...toPaging(page) })
     .then(rs => rs.map(mapToView)),
-  listForDashboard: () => /* 画面専用のJOIN・集計。用途名で置く */,
+  listForDashboard: () => ...,  // 画面専用のJOIN・集計。用途名で置く
 }
 ```
 

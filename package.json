@@ -21,7 +21,8 @@
     "typecheck": "tsc --noEmit",
     "generate:checks": "tsx scripts/generate-checks.ts",
     "build:rules": "tsx scripts/build-rules.ts",
-    "build:qiita": "tsx scripts/build-qiita.ts"
+    "build:qiita": "tsx scripts/build-qiita.ts",
+    "check:docs": "tsx scripts/check-doc-snippets.ts"
   },
   "devDependencies": {
     "tsx": "^4.19.0",
